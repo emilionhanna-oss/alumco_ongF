@@ -1,0 +1,6 @@
+@echo off
+echo Iniciando Servidor Backend (Alumco)...
+start cmd /k "cd backend-alumco && npm run dev"
+
+echo Iniciando Interfaz Frontend (Alumco)...
+start cmd /k "cd frontend-alumco && npm run dev"

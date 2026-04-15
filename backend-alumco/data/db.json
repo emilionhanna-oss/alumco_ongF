@@ -1,0 +1,126 @@
+{
+  "cursos": [
+    {
+      "id": "1",
+      "titulo": "Protocolo de Prevención de Caídas",
+      "imagen": "/static/course-images/curso-1-caidas.svg",
+      "progreso": 33,
+      "descripcion": "Estrategias prácticas para reducir riesgos de caídas y proteger la autonomía de personas mayores residentes en ELEAM.",
+      "modulos": [
+        {
+          "tituloModulo": "Movilización Segura en Rutina Diaria",
+          "tipo": "video",
+          "contenido": "https://www.youtube.com/embed/2fcWRuIrhwg",
+          "materialDescargable": null,
+          "completado": true
+        },
+        {
+          "tituloModulo": "Adecuación del Entorno para Residentes",
+          "tipo": "lectura",
+          "contenido": "Aprenderás a identificar zonas de riesgo en habitaciones, baños y pasillos. Se revisan estándares de iluminación, barandas, suelos antideslizantes y señalética para favorecer la seguridad y el bienestar integral de los residentes.",
+          "materialDescargable": null,
+          "completado": false
+        },
+        {
+          "tituloModulo": "Evaluación de Riesgo de Caídas",
+          "tipo": "quiz",
+          "contenido": "Caso clínico: residente con inestabilidad al caminar. Selecciona medidas preventivas correctas y define plan de seguimiento semanal.",
+          "materialDescargable": null,
+          "completado": false
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "titulo": "Administración y Registro de Medicamentos",
+      "imagen": "/static/course-images/curso-2-medicamentos.svg",
+      "progreso": 67,
+      "descripcion": "Procedimientos para la administración responsable de fármacos y registro clínico oportuno enfocado en seguridad del residente.",
+      "modulos": [
+        {
+          "tituloModulo": "Regla de los 10 Correctos en Medicación",
+          "tipo": "video",
+          "contenido": "https://www.youtube.com/embed/cm7GexPKNOc",
+          "materialDescargable": null,
+          "completado": true
+        },
+        {
+          "tituloModulo": "Registro en Ficha Clínica y Trazabilidad",
+          "tipo": "lectura",
+          "contenido": "Se explican buenas prácticas para registrar hora, dosis, vía de administración y observaciones posteriores. Un registro claro mejora continuidad de cuidados y disminuye eventos adversos en residentes mayores.",
+          "materialDescargable": null,
+          "completado": true
+        },
+        {
+          "tituloModulo": "Errores Frecuentes y Prevención",
+          "tipo": "quiz",
+          "contenido": "Simulación de turno: identifica 5 riesgos en una pauta de medicación y selecciona acciones preventivas según protocolo del ELEAM.",
+          "materialDescargable": null,
+          "completado": false
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "titulo": "Higiene y Control de Infecciones",
+      "imagen": "/static/course-images/curso-3-higiene.svg",
+      "progreso": 0,
+      "descripcion": "Protocolos esenciales de higiene para prevenir infecciones y asegurar ambientes saludables en residencias de larga estadía.",
+      "modulos": [
+        {
+          "tituloModulo": "Lavado de Manos Clínico Paso a Paso",
+          "tipo": "video",
+          "contenido": "https://www.youtube.com/embed/IisgnbMfKvI",
+          "materialDescargable": null,
+          "completado": false
+        },
+        {
+          "tituloModulo": "Manejo de Residuos y EPP",
+          "tipo": "lectura",
+          "contenido": "Describe segregación de residuos, uso correcto de elementos de protección personal y rutas de desecho seguro. Estas medidas disminuyen transmisión cruzada y protegen tanto a residentes como al equipo de cuidado.",
+          "materialDescargable": null,
+          "completado": false
+        },
+        {
+          "tituloModulo": "Limpieza de Áreas Comunes",
+          "tipo": "quiz",
+          "contenido": "Ordena correctamente el flujo de limpieza y desinfección de comedor, pasillos y salas de estar para reducir brotes intrarresidencia.",
+          "materialDescargable": null,
+          "completado": false
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "titulo": "Primeros Auxilios en el Adulto Mayor",
+      "imagen": "/static/course-images/curso-4-primeros-auxilios.svg",
+      "progreso": 0,
+      "descripcion": "Reconocimiento temprano y respuesta inicial ante emergencias frecuentes en personas mayores residentes.",
+      "modulos": [
+        {
+          "tituloModulo": "Signos de Alerta y Derivación",
+          "tipo": "lectura",
+          "contenido": "Identifica signos clínicos que requieren derivación oportuna, priorizando seguridad y tiempos de respuesta.",
+          "materialDescargable": null,
+          "completado": false
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "titulo": "Trato Digno y Ética en el Cuidado",
+      "imagen": "/static/course-images/curso-5-trato-digno.svg",
+      "progreso": 0,
+      "descripcion": "Fortalece la comunicación respetuosa, el enfoque centrado en la persona y la autonomía en el cuidado diario.",
+      "modulos": [
+        {
+          "tituloModulo": "Comunicación Afectiva con Residentes",
+          "tipo": "lectura",
+          "contenido": "Herramientas para conversaciones empáticas, escucha activa y resolución de conflictos cotidianos.",
+          "materialDescargable": null,
+          "completado": false
+        }
+      ]
+    }
+  ]
+}
