@@ -31,4 +31,30 @@ const iniciarSesion = (req, res) => {
     }
 };
 
-module.exports = { iniciarSesion };
+const registrarUsuario = (req, res) => {
+    try {
+        const datos = authService.register(req.body || {});
+
+        return res.status(201).json({
+            mensaje: 'Registro enviado correctamente. Queda pendiente de aprobación.',
+            usuario: datos,
+        });
+    } catch (error) {
+        return res.status(400).json({ mensaje: error.message || 'No se pudo completar el registro' });
+    }
+};
+
+const listarSedesRegistro = (req, res) => {
+    try {
+        const sedes = authService.listRegistrationSedes();
+        return res.status(200).json({ sedes });
+    } catch (error) {
+        return res.status(500).json({ mensaje: 'No se pudieron obtener las sedes' });
+    }
+};
+
+module.exports = {
+    iniciarSesion,
+    registrarUsuario,
+    listarSedesRegistro,
+};

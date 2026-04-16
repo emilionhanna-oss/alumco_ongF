@@ -25,8 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { courseService } from '../services/apiService';
-import type { CourseDetail, CursoModulo } from '../types';
+import { courseService, userService } from '../services/apiService';
+import type { CourseDetail, CursoModulo, User } from '../types';
 
 const PRACTICA_PRESENCIAL_MESSAGE =
   'Se le ha notificado a tu instructor que has finalizado la parte teórica. Por favor, espera a ser contactado para coordinar tu evaluación práctica presencial';
@@ -125,6 +125,13 @@ export default function AdminEditorCurso() {
 
   const [baselineSnapshot, setBaselineSnapshot] = useState('');
 
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [massAssignSede, setMassAssignSede] = useState<string>('all');
+  const [massAssignCargo, setMassAssignCargo] = useState<string>('all');
+  const [isMassAssigning, setIsMassAssigning] = useState(false);
+
   const currentSnapshot = useMemo(
     () =>
       JSON.stringify({
@@ -137,6 +144,32 @@ export default function AdminEditorCurso() {
   );
 
   const hasUnsavedChanges = baselineSnapshot !== '' && baselineSnapshot !== currentSnapshot;
+
+  const activeUsers = useMemo(
+    () =>
+      allUsers.filter(
+        (u) => String(u?.estado || '').toLowerCase() === 'activo' && typeof u?.id === 'string'
+      ),
+    [allUsers]
+  );
+
+  const availableSedes = useMemo(() => {
+    const set = new Set<string>();
+    for (const user of activeUsers) {
+      const sede = String(user?.sede || '').trim();
+      if (sede) set.add(sede);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [activeUsers]);
+
+  const availableCargos = useMemo(() => {
+    const set = new Set<string>();
+    for (const user of activeUsers) {
+      const cargo = String(user?.cargo || '').trim();
+      if (cargo) set.add(cargo);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [activeUsers]);
 
   const redirectTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
@@ -176,10 +209,14 @@ export default function AdminEditorCurso() {
         const loadedTitle = detail.title || '';
         const loadedDescription = detail.description || '';
         const loadedImage = detail.image || '';
+        const loadedAssignedUsers = Array.isArray(detail.alumnosInscritos)
+          ? detail.alumnosInscritos.map(String)
+          : [];
 
         setEditTitle(loadedTitle);
         setEditDescription(loadedDescription);
         setEditImage(loadedImage);
+        setAssignedUserIds(loadedAssignedUsers);
 
         const mapped: EditModulo[] = modulos.map((m) => {
           const tipo = (m.tipo || 'lectura') as ModuloTipo;
@@ -295,6 +332,29 @@ export default function AdminEditorCurso() {
     };
   }, [courseId]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUsers = async () => {
+      setIsLoadingUsers(true);
+
+      try {
+        const response = await userService.getUsers();
+        if (!isMounted) return;
+        setAllUsers(response.success && response.data ? response.data : []);
+      } finally {
+        if (!isMounted) return;
+        setIsLoadingUsers(false);
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const updateModule = (index: number, patch: Partial<EditModulo>) => {
     setEditModules((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
   };
@@ -365,6 +425,56 @@ export default function AdminEditorCurso() {
   };
 
   const selectedModule = editModules[selectedIndex];
+
+  const handleMassAssign = async (mode: 'sede' | 'cargo') => {
+    if (!courseId || isMassAssigning) return;
+
+    const selectedValue = mode === 'sede' ? massAssignSede : massAssignCargo;
+    if (!selectedValue || selectedValue === 'all') {
+      toast.error(`Selecciona ${mode === 'sede' ? 'una sede' : 'un cargo'} para inscribir.`);
+      return;
+    }
+
+    const candidates = activeUsers.filter((user) => {
+      if (!user.id) return false;
+
+      if (mode === 'sede') {
+        return String(user.sede || '').trim() === selectedValue;
+      }
+
+      return String(user.cargo || '').trim() === selectedValue;
+    });
+
+    if (candidates.length === 0) {
+      toast.error('No se encontraron usuarios activos para ese filtro.');
+      return;
+    }
+
+    const candidateIds = candidates.map((u) => String(u.id));
+    const mergedIds = Array.from(new Set([...assignedUserIds, ...candidateIds]));
+
+    if (mergedIds.length === assignedUserIds.length) {
+      toast.message('Todos los usuarios de ese grupo ya estaban inscritos.');
+      return;
+    }
+
+    setIsMassAssigning(true);
+
+    try {
+      const response = await courseService.assignStudentsToCourse(courseId, mergedIds);
+      if (!response.success) {
+        toast.error(response.error || 'No se pudo realizar la asignación masiva.');
+        return;
+      }
+
+      setAssignedUserIds(mergedIds);
+
+      const addedCount = mergedIds.length - assignedUserIds.length;
+      toast.success(`Se inscribieron ${addedCount} usuario(s) por ${mode}.`);
+    } finally {
+      setIsMassAssigning(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!courseId || isRedirectingAfterSave) return;
@@ -580,6 +690,71 @@ export default function AdminEditorCurso() {
                     </div>
                   </div>
                 )}
+
+                <div className="pt-4 border-t space-y-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">Asignación masiva</div>
+                    <div className="text-xs text-gray-600">Inscribe usuarios activos por sede o por cargo</div>
+                  </div>
+
+                  <div className="rounded-md border p-3 bg-slate-50 space-y-3">
+                    <div className="text-xs text-gray-600">
+                      Inscritos actuales: <span className="font-semibold text-gray-800">{assignedUserIds.length}</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-gray-700">Por sede</div>
+                      <Select value={massAssignSede} onValueChange={setMassAssignSede}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona sede" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Selecciona sede</SelectItem>
+                          {availableSedes.map((sede) => (
+                            <SelectItem key={sede} value={sede}>
+                              {sede}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => void handleMassAssign('sede')}
+                        disabled={isMassAssigning || isLoadingUsers || availableSedes.length === 0}
+                      >
+                        {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios de la sede'}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-gray-700">Por cargo</div>
+                      <Select value={massAssignCargo} onValueChange={setMassAssignCargo}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona cargo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Selecciona cargo</SelectItem>
+                          {availableCargos.map((cargo) => (
+                            <SelectItem key={cargo} value={cargo}>
+                              {cargo}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => void handleMassAssign('cargo')}
+                        disabled={isMassAssigning || isLoadingUsers || availableCargos.length === 0}
+                      >
+                        {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios del cargo'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between gap-2">

@@ -6,14 +6,18 @@
 export interface User {
   id?: string;
   email: string;
-  name: string;
-  rol?: Array<'admin' | 'instructor' | 'estudiante' | 'profesor' | 'usuario'>;
+  name?: string;
+  rol?: string[];
   nombre?: string;
   nombreCompleto?: string;
   genero?: 'femenino' | 'masculino' | 'no_binario' | 'otro';
   avatar?: string;
   rut?: string;
+  sede?: string;
   cargo?: string;
+  estado?: 'pendiente' | 'activo' | 'vencido';
+  fechaRegistro?: string | null;
+  fechaExpiracion?: string | null;
   firmaTexto?: string;
   firmaImagenDataUrl?: string;
 }

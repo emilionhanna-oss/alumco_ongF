@@ -15,7 +15,29 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_VERSION_KEY = 'auth_version';
-const AUTH_STORAGE_VERSION = '2';
+const AUTH_STORAGE_VERSION = '3';
+
+function isExpiredDate(fechaExpiracion?: string | null): boolean {
+  if (!fechaExpiracion) return false;
+  const parsed = new Date(fechaExpiracion);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() <= Date.now();
+}
+
+function getAccessDeniedMessage(user: Partial<User> | null | undefined): string | null {
+  if (!user) return null;
+
+  const estado = String((user as any)?.estado || '').toLowerCase();
+  if (estado === 'pendiente') {
+    return 'Tu acceso está pendiente de aprobación por un administrador.';
+  }
+
+  if (estado === 'vencido' || isExpiredDate((user as any)?.fechaExpiracion)) {
+    return 'Tu acceso se encuentra vencido. Contacta al administrador.';
+  }
+
+  return null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -48,10 +70,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? [rawRoles]
             : undefined;
 
-        setUser({
+        const normalizedUser: User = {
           ...(parsedUser as User),
           rol: normalizedRoles,
-        });
+        };
+
+        const denied = getAccessDeniedMessage(normalizedUser);
+        if (denied) {
+          localStorage.removeItem('usuario');
+          localStorage.removeItem('token');
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
+
+        setUser(normalizedUser);
       } catch (error) {
         console.error('Error restaurando usuario:', error);
         localStorage.removeItem('usuario');
@@ -89,7 +122,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nombreCompleto: apiUser?.nombreCompleto ?? apiUser?.name ?? apiUser?.nombre,
           genero: apiUser?.genero,
           avatar: apiUser?.avatar,
+          rut: apiUser?.rut,
+          sede: apiUser?.sede,
+          cargo: apiUser?.cargo,
+          estado: apiUser?.estado,
+          fechaRegistro: apiUser?.fechaRegistro,
+          fechaExpiracion: apiUser?.fechaExpiracion ?? null,
         };
+
+        const denied = getAccessDeniedMessage(normalizedUser);
+        if (denied) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('usuario');
+          setUser(null);
+          return {
+            success: false,
+            error: denied,
+          };
+        }
 
         // Guardamos el token y usuario
         localStorage.setItem(AUTH_VERSION_KEY, AUTH_STORAGE_VERSION);

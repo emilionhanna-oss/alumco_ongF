@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from '../components/ui/dialog';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BACKEND_URL } from '../config/api.config';
+import SignUp from './SignUp';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
@@ -45,10 +46,6 @@ export default function Login() {
 
   // Registration form states
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regNombre, setRegNombre] = useState('');
-  const [regError, setRegError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,37 +79,13 @@ export default function Login() {
     }
   };
 
-  const handleRegistration = (e: React.FormEvent) => {
-    e.preventDefault();
-    setRegError('');
-
-    if (!regEmail || !regPassword || !regNombre) {
-      setRegError('Por favor complete todos los campos');
-      return;
-    }
-
-    if (!regEmail.includes('@')) {
-      setRegError('Por favor ingrese un correo válido');
-      return;
-    }
-
-    console.log('New registration:', { regEmail, regNombre });
-
-    setRegEmail('');
-    setRegPassword('');
-    setRegNombre('');
-    setRegError('');
-
-    setShowSuccessMessage(true);
-  };
-
   const switchToRegister = () => {
     setError('');
     setViewMode('register');
   };
 
   const switchToLogin = () => {
-    setRegError('');
+    setError('');
     setViewMode('login');
   };
 
@@ -197,11 +170,11 @@ export default function Login() {
         />
       </div>
 
-      <div className="w-full md:h-auto md:max-h-[600px] md:max-w-4xl flex relative z-10">
+      <div className="w-full md:h-auto md:min-h-[640px] md:max-w-5xl flex relative z-10">
         <div className="w-full flex rounded-xl md:rounded-2xl shadow-2xl overflow-hidden">
           
           {/* MOBILE ONLY - Single Panel */}
-          <div className="w-full md:hidden relative overflow-hidden bg-gradient-to-br from-[#1a2840] to-[#2d4263] rounded-xl">
+          <div className="w-full md:hidden min-h-[760px] relative overflow-hidden bg-gradient-to-br from-[#1a2840] to-[#2d4263] rounded-xl">
             <AnimatePresence mode="wait">
               {viewMode === 'login' ? (
                 <motion.div
@@ -312,80 +285,11 @@ export default function Login() {
                       <p className="text-base text-blue-200">Complete sus datos para registrarse</p>
                     </div>
 
-                    <form onSubmit={handleRegistration} className="space-y-4">
-                      <div>
-                        <Label htmlFor="reg-nombre-mobile" className="text-base mb-1.5 block text-white">
-                          Nombre Completo *
-                        </Label>
-                        <Input
-                          id="reg-nombre-mobile"
-                          type="text"
-                          value={regNombre}
-                          onChange={(e) => setRegNombre(e.target.value)}
-                          className="h-11 text-base border-2 bg-white"
-                          placeholder="Ej: María González"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="reg-email-mobile" className="text-base mb-1.5 block text-white">
-                          Correo Electrónico *
-                        </Label>
-                        <Input
-                          id="reg-email-mobile"
-                          type="email"
-                          value={regEmail}
-                          onChange={(e) => setRegEmail(e.target.value)}
-                          className="h-11 text-base border-2 bg-white"
-                          placeholder="tu@correo.cl"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="reg-password-mobile" className="text-base mb-1.5 block text-white">
-                          Contraseña *
-                        </Label>
-                        <Input
-                          id="reg-password-mobile"
-                          type="password"
-                          value={regPassword}
-                          onChange={(e) => setRegPassword(e.target.value)}
-                          className="h-11 text-base border-2 bg-white"
-                          placeholder="Mínimo 6 caracteres"
-                        />
-                      </div>
-
-                      {regError && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-red-50 border-2 border-red-300 text-red-800 px-3 py-2.5 rounded-lg text-base"
-                        >
-                          {regError}
-                        </motion.div>
-                      )}
-
-                      <Button
-                        type="submit"
-                        className="w-full h-11 text-base bg-white text-[#1a2840] hover:bg-gray-100"
-                      >
-                        Registrarse
-                      </Button>
-
-                      <div className="text-center space-y-3">
-                        <div className="pt-3 border-t border-white/20">
-                          <p className="text-base text-blue-200 mb-2">¿Ya tiene una cuenta?</p>
-                          <Button
-                            type="button"
-                            onClick={switchToLogin}
-                            variant="outline"
-                            className="w-full h-11 text-base border-2 border-white text-white bg-transparent hover:bg-white hover:text-[#1a2840]"
-                          >
-                            Iniciar Sesión
-                          </Button>
-                        </div>
-                      </div>
-                    </form>
+                    <SignUp
+                      theme="dark"
+                      onBackToLogin={switchToLogin}
+                      onRegistered={() => setShowSuccessMessage(true)}
+                    />
                   </div>
                 </motion.div>
               )}
@@ -443,66 +347,11 @@ export default function Login() {
                         Volver al Login
                       </button>
 
-                      <form onSubmit={handleRegistration} className="space-y-4">
-                        <div>
-                          <Label htmlFor="reg-nombre" className="text-base mb-1.5 block text-white">
-                            Nombre Completo *
-                          </Label>
-                          <Input
-                            id="reg-nombre"
-                            type="text"
-                            value={regNombre}
-                            onChange={(e) => setRegNombre(e.target.value)}
-                            className="h-11 text-base border-2 bg-white"
-                            placeholder="Ej: María González"
-                          />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="reg-email" className="text-base mb-1.5 block text-white">
-                            Correo Electrónico *
-                          </Label>
-                          <Input
-                            id="reg-email"
-                            type="email"
-                            value={regEmail}
-                            onChange={(e) => setRegEmail(e.target.value)}
-                            className="h-11 text-base border-2 bg-white"
-                            placeholder="tu@correo.cl"
-                          />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="reg-password" className="text-base mb-1.5 block text-white">
-                            Contraseña *
-                          </Label>
-                          <Input
-                            id="reg-password"
-                            type="password"
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            className="h-11 text-base border-2 bg-white"
-                            placeholder="Mínimo 6 caracteres"
-                          />
-                        </div>
-
-                        {regError && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-red-50 border-2 border-red-300 text-red-800 px-3 py-2.5 rounded-lg text-base"
-                          >
-                            {regError}
-                          </motion.div>
-                        )}
-
-                        <Button
-                          type="submit"
-                          className="w-full h-11 text-base bg-white text-[#1a2840] hover:bg-gray-100"
-                        >
-                          Registrarse
-                        </Button>
-                      </form>
+                      <SignUp
+                        theme="dark"
+                        onBackToLogin={switchToLogin}
+                        onRegistered={() => setShowSuccessMessage(true)}
+                      />
                     </div>
                   </motion.div>
                 )}
@@ -629,7 +478,13 @@ export default function Login() {
       </div>
 
       {/* Success Message Dialog */}
-      <Dialog open={showSuccessMessage} onOpenChange={setShowSuccessMessage}>
+      <Dialog
+        open={showSuccessMessage}
+        onOpenChange={(open) => {
+          setShowSuccessMessage(open);
+          if (!open) setViewMode('login');
+        }}
+      >
         <DialogContent className="max-w-md">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}

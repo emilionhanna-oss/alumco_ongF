@@ -10,6 +10,7 @@ import {
   ApiError, 
   User, 
   LoginResponse, 
+  RegisterResponse,
   Course,
   CourseDetail,
   CursoBackend 
@@ -91,37 +92,81 @@ export const authService = {
     }
   },
 
-  /**
-   * Registro (por ahora solo local, sin servidor)
-   */
-  async register(
-    email: string,
-    password: string,
-    name: string
-  ): Promise<ApiResponse<User>> {
+  async getRegistrationSedes(): Promise<ApiResponse<string[]>> {
+    try {
+      const response = await fetchWithTimeout(buildApiUrl(API_CONFIG.ENDPOINTS.AUTH.SEDES), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const body = await response.json();
+        const sedes = Array.isArray(body?.sedes)
+          ? body.sedes.map((s: unknown) => String(s))
+          : [];
+        return { success: true, data: sedes };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No se pudieron cargar las sedes. Verifica la conexión con el servidor.',
+      };
+    }
+  },
+
+  async register(payload: {
+    nombreCompleto: string;
+    rut: string;
+    genero: 'femenino' | 'masculino' | 'otro';
+    sede: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<ApiResponse<RegisterResponse>> {
     try {
       console.log('✍️ Intentando registro...');
-      
-      // NOTA: Esta ruta aún no existe en el backend
-      // Por ahora solo guardamos localmente
-      const newUser: User = {
-        id: 'user_' + Date.now(),
-        email,
-        name,
-        rol: 'estudiante',
-      };
 
-      console.log('✅ Usuario creado (datos locales)');
-      
+      const response = await fetchWithTimeout(
+        buildApiUrl(API_CONFIG.ENDPOINTS.AUTH.REGISTER),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return {
+          success: true,
+          data: data as RegisterResponse,
+        };
+      }
+
       return {
-        success: true,
-        data: newUser,
+        success: false,
+        error: data?.mensaje || 'No se pudo completar el registro',
       };
     } catch (error) {
       console.error('❌ Error en registro:', error);
       return {
         success: false,
-        error: 'Error al registrar usuario',
+        error: 'No hay conexión con el servidor. Por favor, verifica que esté encendido.',
       };
     }
   },
@@ -498,6 +543,43 @@ export const userService = {
       if (response.ok) {
         const data = await response.json();
         return { success: true, data: data as User[] };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
+
+  async updateUser(userId: string, updates: Partial<User>): Promise<ApiResponse<User>> {
+    try {
+      const response = await fetchWithTimeout(
+        buildApiUrl(API_CONFIG.ENDPOINTS.USERS.UPDATE(userId)),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+          body: JSON.stringify(updates),
+        }
+      );
+
+      if (response.ok) {
+        const body = await response.json();
+        const usuario = (body?.usuario ?? body) as User;
+        return { success: true, data: usuario };
       }
 
       let message = `Error del servidor (${response.status}).`;

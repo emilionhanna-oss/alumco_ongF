@@ -10,10 +10,16 @@
       "nombre": "Valentina",
       "nombreCompleto": "Valentina",
       "genero": "femenino",
+      "rut": "11.111.111-1",
+      "sede": "Hualpén (Región del Biobío)",
+      "cargo": "Dirección y Administración",
+      "estado": "activo",
       "rol": [
         "admin",
         "usuario"
-      ]
+      ],
+      "fechaRegistro": "2025-01-05T10:00:00.000Z",
+      "fechaExpiracion": null
     },
     {
       "id": "2",
@@ -25,9 +31,36 @@
       "nombre": "Josefa",
       "nombreCompleto": "Josefa Peralta",
       "genero": "femenino",
+      "rut": "222222222",
+      "sede": "Coyhaique (Región de Aysén)",
+      "cargo": "Terapia Ocupacional",
+      "estado": "pendiente",
       "rol": [
         "usuario"
-      ]
+      ],
+      "fechaRegistro": "2026-03-10T09:00:00.000Z",
+      "fechaExpiracion": null
+    },
+    {
+      "id": "3",
+      "email": "roque@gmail.com",
+      "password": {
+        "salt": "745487e3ad07edb9ad8baac08500b557",
+        "hash": "4d271322a29b00bc6b6a6f9030a616b924d0c86155f5fbe29ce6bb3f7a711b0c0f1872f10f60399b4cabaa68398ba30f2f882a999b9d195a9542fe7565f2ba66"
+      },
+      "nombre": "Roque",
+      "nombreCompleto": "Roque Lafuente",
+      "genero": "masculino",
+      "rut": "217187656",
+      "sede": "Coyhaique (Región de Aysén)",
+      "cargo": "Cuidados Directos (TENS/Gerocultor)",
+      "estado": "activo",
+      "rol": [
+        "usuario",
+        "admin"
+      ],
+      "fechaRegistro": "2026-04-16T17:33:34.062Z",
+      "fechaExpiracion": null
     }
   ],
   "cursos": [

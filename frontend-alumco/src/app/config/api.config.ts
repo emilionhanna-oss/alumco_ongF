@@ -24,6 +24,7 @@ export const API_CONFIG = {
     AUTH: {
       LOGIN: '/api/auth/login',
       REGISTER: '/api/auth/register',
+      SEDES: '/api/auth/sedes',
       LOGOUT: '/api/auth/logout',
     },
     COURSES: {
@@ -34,6 +35,7 @@ export const API_CONFIG = {
     },
     USERS: {
       LIST: '/api/usuarios',
+      UPDATE: (id: string) => `/api/usuarios/${id}`,
     },
     USER: {
       PROFILE: '/api/user/profile',

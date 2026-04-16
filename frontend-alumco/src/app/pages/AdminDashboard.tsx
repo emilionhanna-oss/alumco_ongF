@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import {
@@ -14,6 +15,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { BACKEND_URL } from '../config/api.config';
+import { userService } from '../services/apiService';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
@@ -21,6 +23,33 @@ export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [logoOk, setLogoOk] = useState(true);
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadPendingUsers = async () => {
+      try {
+        const response = await userService.getUsers();
+        if (!mounted || !response.success || !response.data) return;
+
+        const pending = response.data.filter(
+          (u) => String(u.estado || '').toLowerCase() === 'pendiente'
+        ).length;
+
+        setPendingUsersCount(pending);
+      } catch {
+        if (!mounted) return;
+        setPendingUsersCount(0);
+      }
+    };
+
+    loadPendingUsers();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -157,7 +186,15 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/admin/dashboard-metrics')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') navigate('/admin/dashboard-metrics');
+            }}
+          >
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-purple-100 rounded-lg">
@@ -191,7 +228,12 @@ export default function AdminDashboard() {
                   <Users className="w-6 h-6 text-cyan-700" />
                 </div>
                 <div>
-                  <CardTitle>Centro de Usuarios</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <span>Centro de Usuarios</span>
+                    {pendingUsersCount > 0 ? (
+                      <Badge className="bg-red-600 text-white border-red-700">{pendingUsersCount}</Badge>
+                    ) : null}
+                  </CardTitle>
                   <CardDescription>Colaboradores y progreso</CardDescription>
                 </div>
               </div>

@@ -10,6 +10,7 @@ import { courseService, userService } from '../services/apiService';
 import type { Course, User } from '../types';
 import { ArrowLeft, Award, Download, Image as ImageIcon, PenLine, User as UserIcon } from 'lucide-react';
 import { BACKEND_URL } from '../config/api.config';
+import { formatRutForDisplay, normalizeRutForStorage } from '../utils/rut';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
@@ -61,10 +62,31 @@ export default function Perfil() {
     );
   }, [authUser, profile]);
 
+  const roleLabel = useMemo(() => {
+    const roles = Array.isArray(profile?.rol)
+      ? profile?.rol
+      : Array.isArray(authUser?.rol)
+        ? authUser?.rol
+        : [];
+
+    return roles.length > 0 ? roles.join(', ') : 'usuario';
+  }, [authUser?.rol, profile?.rol]);
+
   const firmaImagenSafe = useMemo(() => {
     if (!firmaImagenDataUrl) return undefined;
     return /^data:image\/(png|jpeg|jpg);base64,/i.test(firmaImagenDataUrl) ? firmaImagenDataUrl : undefined;
   }, [firmaImagenDataUrl]);
+
+  const hasSignatureConfigured = useMemo(() => {
+    const text = String(firmaTexto || profile?.firmaTexto || '').trim();
+    const image =
+      firmaImagenSafe ||
+      (/^data:image\/(png|jpeg|jpg);base64,/i.test(String(profile?.firmaImagenDataUrl || ''))
+        ? String(profile?.firmaImagenDataUrl)
+        : '');
+
+    return Boolean(text) || Boolean(image);
+  }, [firmaImagenSafe, firmaTexto, profile?.firmaImagenDataUrl, profile?.firmaTexto]);
 
   useEffect(() => {
     let mounted = true;
@@ -80,7 +102,7 @@ export default function Perfil() {
         if (resp.success && resp.data) {
           setProfile(resp.data);
           setNombreCompleto(resp.data.nombreCompleto || resp.data.nombre || resp.data.name || '');
-          setRut(resp.data.rut || '');
+          setRut(formatRutForDisplay(resp.data.rut));
           setCargo(resp.data.cargo || '');
           setFirmaTexto(resp.data.firmaTexto || '');
           setFirmaImagenDataUrl(resp.data.firmaImagenDataUrl);
@@ -130,11 +152,20 @@ export default function Perfil() {
   const handleSavePersonalInfo = async () => {
     setSaveStatus({ type: 'idle' });
 
+    const normalizedRut = normalizeRutForStorage(rut);
+    if (!normalizedRut) {
+      setSaveStatus({ type: 'error', message: 'Ingresa un RUT válido.' });
+      return;
+    }
+
     const updates: Partial<User> = {
       nombreCompleto: nombreCompleto.trim() || undefined,
-      rut: rut.trim() || undefined,
-      cargo: cargo.trim() || undefined,
+      rut: normalizedRut,
     };
+
+    if (isAdminUser) {
+      updates.cargo = cargo.trim() || undefined;
+    }
 
     const resp = await userService.updateProfile(updates);
     if (resp.success && resp.data) {
@@ -226,6 +257,14 @@ export default function Perfil() {
   };
 
   const downloadCertificate = (course: Course) => {
+    if (!hasSignatureConfigured) {
+      setSaveStatus({
+        type: 'error',
+        message: 'Configura tu firma en el Perfil para descargar tu certificado',
+      });
+      return;
+    }
+
     const alumno = displayName;
     const curso = course.title || 'Curso';
     const fecha = new Date().toLocaleDateString('es-CL');
@@ -385,10 +424,15 @@ export default function Perfil() {
                   <Input
                     id="rut"
                     value={rut}
-                    onChange={(e) => setRut(e.target.value)}
+                    onChange={(e) => setRut(formatRutForDisplay(e.target.value))}
                     placeholder="Ej: 12.345.678-9"
                     disabled={isLoading}
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="rol">Rol</Label>
+                  <Input id="rol" value={roleLabel} disabled />
                 </div>
 
                 <div className="space-y-1">
@@ -398,8 +442,9 @@ export default function Perfil() {
                     value={cargo}
                     onChange={(e) => setCargo(e.target.value)}
                     placeholder="Ej: Cuidador/a"
-                    disabled={isLoading}
+                    disabled={isLoading || !isAdminUser}
                   />
+                  {!isAdminUser ? <div className="text-xs text-gray-500">Solo el administrador puede modificar el cargo.</div> : null}
                 </div>
               </div>
 
@@ -518,26 +563,34 @@ export default function Perfil() {
             ) : certCourses.length === 0 ? (
               <div className="text-sm text-gray-600">Aún no tienes certificados disponibles.</div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {certCourses.map((course) => (
-                  <Card key={course.id} className="border-dashed">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base line-clamp-2">{course.title}</CardTitle>
-                      <CardDescription>Progreso: 100%</CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <Button
-                        className="w-full"
-                        onClick={() => downloadCertificate(course)}
-                        disabled={isLoading}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Descargar
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <>
+                {!hasSignatureConfigured ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                    Configura tu firma en el Perfil para descargar tu certificado
+                  </div>
+                ) : null}
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {certCourses.map((course) => (
+                    <Card key={course.id} className="border-dashed">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base line-clamp-2">{course.title}</CardTitle>
+                        <CardDescription>Progreso: 100%</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <Button
+                          className="w-full"
+                          onClick={() => downloadCertificate(course)}
+                          disabled={isLoading || !hasSignatureConfigured}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Descargar
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

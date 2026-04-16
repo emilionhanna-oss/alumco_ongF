@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { buildApiUrl, API_CONFIG } from '../config/api.config';
+import { userService } from '../services/apiService';
 import type { CursoBackend, CursoModulo } from '../types';
 
 type LoadState =
@@ -67,6 +68,7 @@ export default function CursoDetalle() {
   const location = useLocation();
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [hasProfileSignature, setHasProfileSignature] = useState(false);
 
   const backTo = useMemo(() => {
     const raw = (location.state as any)?.from;
@@ -137,6 +139,32 @@ export default function CursoDetalle() {
       isMounted = false;
     };
   }, [cursoId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSignature = async () => {
+      try {
+        const response = await userService.getProfile();
+        if (!isMounted || !response.success || !response.data) return;
+
+        const firmaTexto = String(response.data.firmaTexto || '').trim();
+        const firmaImagen = String(response.data.firmaImagenDataUrl || '').trim();
+        const hasImage = /^data:image\/(png|jpeg|jpg);base64,/i.test(firmaImagen);
+
+        setHasProfileSignature(Boolean(firmaTexto) || hasImage);
+      } catch {
+        if (!isMounted) return;
+        setHasProfileSignature(false);
+      }
+    };
+
+    loadSignature();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (state.status === 'loading') {
     return (
@@ -243,17 +271,30 @@ export default function CursoDetalle() {
       </div>
 
       {progressValue >= 100 && modulos.length > 0 ? (
-        <Card className="border-emerald-200 bg-emerald-50 mb-6">
-          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-emerald-900">¡Felicidades! Completaste este curso.</div>
-              <div className="text-sm text-emerald-900/90">
-                Tu certificado ya está disponible en tu Perfil.
+        hasProfileSignature ? (
+          <Card className="border-emerald-200 bg-emerald-50 mb-6">
+            <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-emerald-900">¡Felicidades! Completaste este curso.</div>
+                <div className="text-sm text-emerald-900/90">
+                  Tu certificado ya está disponible en tu Perfil.
+                </div>
               </div>
-            </div>
-            <Button onClick={() => navigate('/perfil')}>Ver mi certificado</Button>
-          </CardContent>
-        </Card>
+              <Button onClick={() => navigate('/perfil')}>Ver mi certificado</Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-amber-200 bg-amber-50 mb-6">
+            <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm font-semibold text-amber-900">
+                Configura tu firma en el Perfil para descargar tu certificado
+              </div>
+              <Button variant="outline" onClick={() => navigate('/perfil')}>
+                Ir a Perfil
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : null}
 
       {modulos.length === 0 ? (

@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
+const { isRutValid, normalizeRutForStorage } = require('../utils/rutUtils');
 
 const DB_PATH = path.join(__dirname, '..', '..', 'data', 'db.json');
 
@@ -31,7 +32,11 @@ function sanitizeUserForResponse(u) {
     genero: u?.genero,
     rol: u?.rol,
     rut: u?.rut,
+    sede: u?.sede,
     cargo: u?.cargo,
+    estado: u?.estado,
+    fechaRegistro: u?.fechaRegistro || null,
+    fechaExpiracion: u?.fechaExpiracion ?? null,
     firmaTexto: u?.firmaTexto,
     firmaImagenDataUrl: u?.firmaImagenDataUrl,
   };
@@ -75,6 +80,9 @@ const updateProfile = async (req, res) => {
     const userId = String(req.user?.id || '');
     if (!userId) return res.status(401).json({ mensaje: 'No autorizado' });
 
+    const roles = Array.isArray(req.user?.rol) ? req.user.rol.map(String) : [];
+    const isAdmin = roles.includes('admin');
+
     const {
       nombre,
       nombreCompleto,
@@ -96,15 +104,19 @@ const updateProfile = async (req, res) => {
     const n = asTrimmedString(nombre);
     const nc = asTrimmedString(nombreCompleto);
     const g = asTrimmedString(genero);
-    const r = asTrimmedString(rut);
+    const r = rut !== undefined ? normalizeRutForStorage(rut) : undefined;
     const c = asTrimmedString(cargo);
+
+    if (rut !== undefined && (!r || !isRutValid(r))) {
+      return res.status(400).json({ mensaje: 'RUT inválido' });
+    }
 
     // Campos de texto básicos (opcionales)
     if (n !== undefined) next.nombre = n;
     if (nc !== undefined) next.nombreCompleto = nc;
     if (g !== undefined) next.genero = g;
     if (r !== undefined) next.rut = r;
-    if (c !== undefined) next.cargo = c;
+    if (isAdmin && c !== undefined) next.cargo = c;
 
     // Firma: permitimos texto o imagen (o borrar)
     const ft = asTrimmedString(firmaTexto);
