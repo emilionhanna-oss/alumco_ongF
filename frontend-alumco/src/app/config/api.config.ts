@@ -29,6 +29,11 @@ export const API_CONFIG = {
     COURSES: {
       LIST: '/api/cursos',
       DETAIL: (id: string) => `/api/cursos/${id}`,
+      UPDATE: (id: string) => `/api/cursos/${id}`,
+      ASSIGN_STUDENTS: (id: string) => `/api/cursos/${id}/alumnos`,
+    },
+    USERS: {
+      LIST: '/api/usuarios',
     },
     USER: {
       PROFILE: '/api/user/profile',

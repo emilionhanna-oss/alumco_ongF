@@ -7,8 +7,15 @@ export interface User {
   id?: string;
   email: string;
   name: string;
-  rol?: 'admin' | 'instructor' | 'estudiante';
+  rol?: Array<'admin' | 'instructor' | 'estudiante' | 'profesor' | 'usuario'>;
+  nombre?: string;
+  nombreCompleto?: string;
+  genero?: 'femenino' | 'masculino' | 'no_binario' | 'otro';
   avatar?: string;
+  rut?: string;
+  cargo?: string;
+  firmaTexto?: string;
+  firmaImagenDataUrl?: string;
 }
 
 // ============ AUTENTICACIÓN ============
@@ -36,6 +43,8 @@ export interface Course {
   enrolledStudents?: number;
   image?: string;
   progress?: number; // 0-100
+  alumnosInscritos?: string[];
+  instructorId?: string;
 }
 
 export interface CourseDetail extends Course {
@@ -46,12 +55,12 @@ export interface CourseDetail extends Course {
 }
 
 // ============ CURSOS (BACKEND - FUENTE DE VERDAD) ============
-export type CursoModuloTipo = 'video' | 'lectura' | 'quiz';
+export type CursoModuloTipo = 'video' | 'lectura' | 'quiz' | 'practica_presencial';
 
 export interface CursoModulo {
   tituloModulo?: string;
   tipo?: CursoModuloTipo;
-  contenido?: string;
+  contenido?: unknown;
   materialDescargable?: string | null;
   completado?: boolean;
 }
@@ -62,6 +71,8 @@ export interface CursoBackend {
   imagen?: string;
   progreso?: number; // 0-100
   descripcion: string;
+  instructorId?: string;
+  alumnosInscritos?: string[];
   modulos: CursoModulo[];
 }
 

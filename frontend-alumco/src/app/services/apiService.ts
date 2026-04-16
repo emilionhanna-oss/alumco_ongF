@@ -136,12 +136,14 @@ export const courseService = {
    * Fuente de verdad: backend (`data/db.json`).
    * Si el servidor falla, NO inventa cursos.
    */
-  async getCourses(): Promise<ApiResponse<Course[]>> {
+  async getCourses(options: { all?: boolean } = {}): Promise<ApiResponse<Course[]>> {
     try {
       console.log('📚 Obteniendo lista de cursos...');
-      
+
+      const qs = options.all ? '?all=1' : '';
+
       const response = await fetchWithTimeout(
-        buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.LIST),
+        buildApiUrl(`${API_CONFIG.ENDPOINTS.COURSES.LIST}${qs}`),
         {
           method: 'GET',
           headers: {
@@ -164,6 +166,10 @@ export const courseService = {
                   : buildApiUrl(curso.imagen)
                 : undefined,
               progress: curso.progreso,
+              instructorId: curso.instructorId,
+              alumnosInscritos: Array.isArray(curso.alumnosInscritos)
+                ? curso.alumnosInscritos.map(String)
+                : [],
             }))
           : [];
         console.log('✅ Cursos obtenidos del servidor');
@@ -205,7 +211,7 @@ export const courseService = {
   async getCourseDetail(courseId: string): Promise<ApiResponse<CourseDetail>> {
     try {
       console.log(`📖 Obteniendo curso ${courseId}...`);
-      
+
       const response = await fetchWithTimeout(
         buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(courseId)),
         {
@@ -232,6 +238,10 @@ export const courseService = {
               : undefined,
             progress: (data as CursoBackend)?.progreso,
             description: (data as CursoBackend)?.descripcion,
+            instructorId: (data as CursoBackend)?.instructorId,
+            alumnosInscritos: Array.isArray((data as CursoBackend)?.alumnosInscritos)
+              ? (data as CursoBackend)?.alumnosInscritos?.map(String)
+              : [],
             modulos: (data as CursoBackend)?.modulos,
           } as CourseDetail,
         };
@@ -259,12 +269,254 @@ export const courseService = {
       };
     }
   },
+
+  async createCourse(payload: {
+    titulo?: string;
+    descripcion?: string;
+    imagen?: string;
+  }): Promise<ApiResponse<Course>> {
+    try {
+      const response = await fetchWithTimeout(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.LIST), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const body = await response.json();
+        const curso = (body?.curso ?? body) as CursoBackend;
+
+        const normalized: Course = {
+          id: String(curso?.id),
+          title: curso?.titulo,
+          description: curso?.descripcion,
+          image: curso?.imagen
+            ? String(curso.imagen).startsWith('http')
+              ? curso.imagen
+              : buildApiUrl(String(curso.imagen))
+            : undefined,
+          progress: curso?.progreso,
+          instructorId: (curso as any)?.instructorId,
+          alumnosInscritos: Array.isArray((curso as any)?.alumnosInscritos)
+            ? (curso as any).alumnosInscritos.map(String)
+            : [],
+        };
+
+        return { success: true, data: normalized };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
+
+  async updateCourse(
+    courseId: string,
+    payload: {
+      titulo?: string;
+      descripcion?: string;
+      imagen?: string;
+      modulos?: Array<{ tituloModulo: string; tipo: string; contenido: unknown }>;
+    }
+  ): Promise<ApiResponse<Course>> {
+    try {
+      const response = await fetchWithTimeout(
+        buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.UPDATE(courseId)),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (response.ok) {
+        const body = await response.json();
+        const curso = (body?.curso ?? body) as CursoBackend;
+
+        const normalized: Course = {
+          id: String(curso?.id ?? courseId),
+          title: curso?.titulo,
+          description: curso?.descripcion,
+          image: curso?.imagen
+            ? String(curso.imagen).startsWith('http')
+              ? curso.imagen
+              : buildApiUrl(String(curso.imagen))
+            : undefined,
+          progress: curso?.progreso,
+          instructorId: (curso as any)?.instructorId,
+          alumnosInscritos: Array.isArray((curso as any)?.alumnosInscritos)
+            ? (curso as any).alumnosInscritos.map(String)
+            : [],
+        };
+
+        return { success: true, data: normalized };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
+
+  async deleteCourse(courseId: string): Promise<ApiResponse<{ id: string }>> {
+    try {
+      const response = await fetchWithTimeout(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.UPDATE(courseId)), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+
+      if (response.ok) {
+        const body = await response.json();
+        const id = String(body?.id ?? courseId);
+        return { success: true, data: { id } };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
+
+  async assignStudentsToCourse(
+    courseId: string,
+    alumnosInscritos: string[]
+  ): Promise<ApiResponse<Course>> {
+    try {
+      const response = await fetchWithTimeout(
+        buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.ASSIGN_STUDENTS(courseId)),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+          body: JSON.stringify({ alumnosInscritos }),
+        }
+      );
+
+      if (response.ok) {
+        const body = await response.json();
+        const curso = (body?.curso ?? body) as CursoBackend;
+
+        const normalized: Course = {
+          id: String(curso?.id ?? courseId),
+          title: curso?.titulo,
+          description: curso?.descripcion,
+          image: curso?.imagen
+            ? String(curso.imagen).startsWith('http')
+              ? curso.imagen
+              : buildApiUrl(String(curso.imagen))
+            : undefined,
+          progress: curso?.progreso,
+          instructorId: (curso as any)?.instructorId,
+          alumnosInscritos: Array.isArray((curso as any)?.alumnosInscritos)
+            ? (curso as any).alumnosInscritos.map(String)
+            : [],
+        };
+
+        return { success: true, data: normalized };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
 };
 
 /**
  * Servicio de Usuario
  */
 export const userService = {
+  async getUsers(): Promise<ApiResponse<User[]>> {
+    try {
+      const response = await fetchWithTimeout(
+        buildApiUrl(API_CONFIG.ENDPOINTS.USERS.LIST),
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data as User[] };
+      }
+
+      let message = `Error del servidor (${response.status}).`;
+      try {
+        const err = await response.json();
+        message = (err?.mensaje as string) || message;
+      } catch {
+        // ignore
+      }
+
+      return { success: false, error: message };
+    } catch {
+      return {
+        success: false,
+        error: 'No hay conexión con el servidor. Verifica que el backend esté encendido.',
+      };
+    }
+  },
+
   /**
    * Obtiene perfil de usuario
    * Si falla, intenta obtener datos del localStorage o usa mock

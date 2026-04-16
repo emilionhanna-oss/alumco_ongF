@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { BookOpen, GraduationCap, LogOut, User, AlertCircle } from 'lucide-react';
+import CourseCard from '../components/CourseCard';
 import { courseService } from '../services/apiService';
 import { BACKEND_URL } from '../config/api.config';
 import type { Course } from '../types';
 
-const LOGO_SRC = '/alumco-logo.png';
+const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
 export default function Panel() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [serverStatus, setServerStatus] = useState<'connected' | 'disconnected'>('disconnected');
@@ -51,7 +53,7 @@ export default function Panel() {
 
   const handleOpenCourse = (courseId: string) => {
     if (!courseId) return;
-    navigate(`/curso/${courseId}`);
+    navigate(`/curso/${courseId}`, { state: { from: location.pathname } });
   };
 
   return (
@@ -97,7 +99,17 @@ export default function Panel() {
             <div className="flex items-center gap-3 mb-2">
               <User className="w-8 h-8" />
               <h2 className="text-2xl sm:text-3xl">
-                ¡Bienvenido, {user?.name || 'Usuario'}!
+                {(() => {
+                  const displayName = user?.nombreCompleto || user?.name || 'Usuario';
+                  const genero = (user as any)?.genero as string | undefined;
+                  const saludo =
+                    genero === 'femenino'
+                      ? '¡Bienvenida'
+                      : genero === 'masculino'
+                        ? '¡Bienvenido'
+                        : '¡Te damos la bienvenida';
+                  return `${saludo}, ${displayName}!`;
+                })()}
               </h2>
             </div>
             <p className="text-lg text-blue-100">
@@ -161,7 +173,15 @@ export default function Panel() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow sm:col-span-2 lg:col-span-1">
+          <Card
+            className="hover:shadow-lg transition-shadow sm:col-span-2 lg:col-span-1 cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/perfil')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') navigate('/perfil');
+            }}
+          >
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-purple-100 rounded-lg">
@@ -169,13 +189,13 @@ export default function Panel() {
                 </div>
                 <div>
                   <CardTitle>Mi Perfil</CardTitle>
-                  <CardDescription>Próximamente</CardDescription>
+                  <CardDescription>Datos y certificados</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Gestiona tu información personal y preferencias de capacitación.
+                Gestiona tu información personal, firma y descarga tus certificados.
               </p>
             </CardContent>
           </Card>
@@ -210,77 +230,7 @@ export default function Panel() {
                 </Card>
               ) : (
                 courses.map((course) => (
-                  <Card
-                    key={course.id}
-                    className="hover:shadow-lg transition-shadow overflow-hidden cursor-pointer"
-                    onClick={() => handleOpenCourse(String(course.id))}
-                  >
-                    <div
-                      className="h-40 bg-gradient-to-br from-blue-400 to-blue-600"
-                      style={
-                        course.image
-                          ? {
-                              backgroundImage: `url("${course.image}")`,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                            }
-                          : undefined
-                      }
-                    />
-                    <CardHeader>
-                      <CardTitle className="text-lg">{course.title || 'Sin título'}</CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {course.description || 'Sin descripción'}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 text-sm">
-                        {course.instructor && (
-                          <p className="text-gray-600">
-                            <strong>Instructor:</strong> {course.instructor}
-                          </p>
-                        )}
-                        {course.duration && (
-                          <p className="text-gray-600">
-                            <strong>Duración:</strong> {course.duration}
-                          </p>
-                        )}
-                        {course.level && (
-                          <p className="text-gray-600">
-                            <strong>Nivel:</strong> {course.level}
-                          </p>
-                        )}
-                        {course.enrolledStudents !== undefined && (
-                          <p className="text-gray-600">
-                            <strong>Estudiantes:</strong> {course.enrolledStudents}
-                          </p>
-                        )}
-                      </div>
-                        <div className="mt-4">
-                          {(() => {
-                            const progressValue = Math.max(
-                              0,
-                              Math.min(100, Number(course.progress ?? 0))
-                            );
-
-                            return (
-                              <>
-                                <div className="flex justify-between items-center mb-2">
-                                  <span className="text-xs font-medium text-gray-700">Progreso</span>
-                                  <span className="text-xs font-bold text-blue-600">{progressValue}%</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${progressValue}%` }}
-                                  ></div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                    </CardContent>
-                  </Card>
+                  <CourseCard key={course.id} course={course} onOpen={handleOpenCourse} />
                 ))
               )}
             </div>

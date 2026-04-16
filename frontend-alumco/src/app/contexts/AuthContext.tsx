@@ -3,7 +3,10 @@ import type { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; user?: User; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -11,19 +14,44 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const AUTH_VERSION_KEY = 'auth_version';
+const AUTH_STORAGE_VERSION = '2';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Restaurar usuario del localStorage al cargar
   useEffect(() => {
+    const version = localStorage.getItem(AUTH_VERSION_KEY);
+
+    // Si cambió el esquema de auth (por actualizaciones), forzamos volver a login
+    if (version !== AUTH_STORAGE_VERSION) {
+      localStorage.removeItem('usuario');
+      localStorage.removeItem('token');
+      localStorage.setItem(AUTH_VERSION_KEY, AUTH_STORAGE_VERSION);
+      setIsLoading(false);
+      return;
+    }
+
     const storedUser = localStorage.getItem('usuario');
     const token = localStorage.getItem('token');
-    
+
     if (storedUser && token) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
+        const rawRoles =
+          (parsedUser as any)?.rol ?? (parsedUser as any)?.role ?? (parsedUser as any)?.roles;
+        const normalizedRoles: User['rol'] = Array.isArray(rawRoles)
+          ? rawRoles
+          : rawRoles
+            ? [rawRoles]
+            : undefined;
+
+        setUser({
+          ...(parsedUser as User),
+          rol: normalizedRoles,
+        });
       } catch (error) {
         console.error('Error restaurando usuario:', error);
         localStorage.removeItem('usuario');
@@ -36,20 +64,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (
     email: string,
     password: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; user?: User; error?: string }> => {
     try {
       // Importamos el servicio aquí para evitar circular dependencies
       const { authService } = await import('../services/apiService');
-      
+
       const response = await authService.login(email, password);
 
       if (response.success && response.data?.usuario && response.data?.token) {
-        // Guardamos el token y usuario
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('usuario', JSON.stringify(response.data.usuario));
-        setUser(response.data.usuario);
+        const apiUser = response.data.usuario as any;
+        const rawRoles = apiUser?.rol ?? apiUser?.role ?? apiUser?.roles;
+        const normalizedRoles: User['rol'] = Array.isArray(rawRoles)
+          ? rawRoles
+          : rawRoles
+            ? [rawRoles]
+            : undefined;
 
-        return { success: true };
+        const normalizedUser: User = {
+          id: apiUser?.id ? String(apiUser.id) : undefined,
+          email: apiUser?.email ?? email,
+          name: apiUser?.name ?? apiUser?.nombreCompleto ?? apiUser?.nombre ?? email,
+          rol: normalizedRoles,
+          nombre: apiUser?.nombre,
+          nombreCompleto: apiUser?.nombreCompleto ?? apiUser?.name ?? apiUser?.nombre,
+          genero: apiUser?.genero,
+          avatar: apiUser?.avatar,
+        };
+
+        // Guardamos el token y usuario
+        localStorage.setItem(AUTH_VERSION_KEY, AUTH_STORAGE_VERSION);
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('usuario', JSON.stringify(normalizedUser));
+        setUser(normalizedUser);
+
+        return { success: true, user: normalizedUser };
       } else {
         return {
           success: false,

@@ -7,8 +7,9 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogTitle } from '../components/ui/dialog';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { BACKEND_URL } from '../config/api.config';
 
-const LOGO_SRC = '/alumco-logo.png';
+const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
 function AlumcoLogo({ variant }: { variant: 'light' | 'dark' }) {
   const [imageOk, setImageOk] = useState(true);
@@ -65,8 +66,10 @@ export default function Login() {
       const result = await login(email, password);
 
       if (result.success) {
-        // Login exitoso - redirigir al panel
-        navigate('/panel'); 
+        const roles = (result.user as any)?.rol;
+        const isAdminUser = Array.isArray(roles) && roles.includes('admin');
+
+        navigate(isAdminUser ? '/admin' : '/panel');
       } else {
         // Mostrar error de forma amable
         setError(result.error || 'Error al iniciar sesión. Por favor intente de nuevo.');
