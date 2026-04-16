@@ -1,36 +1,6 @@
 {
   "cursos": [
     {
-      "id": "1",
-      "titulo": "Protocolo de Prevención de Caídas",
-      "imagen": "/static/course-images/curso-1-caidas.svg",
-      "progreso": 33,
-      "descripcion": "Estrategias prácticas para reducir riesgos de caídas y proteger la autonomía de personas mayores residentes en ELEAM.",
-      "modulos": [
-        {
-          "tituloModulo": "Movilización Segura en Rutina Diaria",
-          "tipo": "video",
-          "contenido": "https://www.youtube.com/embed/2fcWRuIrhwg",
-          "materialDescargable": null,
-          "completado": true
-        },
-        {
-          "tituloModulo": "Adecuación del Entorno para Residentes",
-          "tipo": "lectura",
-          "contenido": "Aprenderás a identificar zonas de riesgo en habitaciones, baños y pasillos. Se revisan estándares de iluminación, barandas, suelos antideslizantes y señalética para favorecer la seguridad y el bienestar integral de los residentes.",
-          "materialDescargable": null,
-          "completado": false
-        },
-        {
-          "tituloModulo": "Evaluación de Riesgo de Caídas",
-          "tipo": "quiz",
-          "contenido": "Caso clínico: residente con inestabilidad al caminar. Selecciona medidas preventivas correctas y define plan de seguimiento semanal.",
-          "materialDescargable": null,
-          "completado": false
-        }
-      ]
-    },
-    {
       "id": "2",
       "titulo": "Administración y Registro de Medicamentos",
       "imagen": "/static/course-images/curso-2-medicamentos.svg",
