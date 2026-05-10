@@ -33,4 +33,5 @@ export type EditModulo = {
   tituloModulo: string;
   tipo: ModuloTipo;
   contenido: ModuloContenido;
+  materialDescargable?: string | null;
 };

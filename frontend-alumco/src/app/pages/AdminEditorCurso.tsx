@@ -3,20 +3,8 @@ import { useNavigate, useParams } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { Toaster } from '../components/ui/sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '../components/ui/alert-dialog';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import {
@@ -26,8 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { courseService, userService } from '../services/apiService';
-import type { CourseDetail, CursoModulo, User } from '../types';
+import { courseService } from '../services/apiService';
+import type { CourseDetail, CursoModulo } from '../types';
 import {
   PRACTICA_PRESENCIAL_MESSAGE,
   type ModuloTipo,
@@ -58,6 +46,7 @@ export default function AdminEditorCurso() {
   const [editModules, setEditModules] = useState<EditModulo[]>([]);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
 
   const [newModuleTitle, setNewModuleTitle] = useState('');
   const [newModuleType, setNewModuleType] = useState<ModuloTipo>('lectura');
@@ -68,6 +57,7 @@ export default function AdminEditorCurso() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isRedirectingAfterSave, setIsRedirectingAfterSave] = useState(false);
+  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -75,12 +65,6 @@ export default function AdminEditorCurso() {
 
   const [baselineSnapshot, setBaselineSnapshot] = useState('');
 
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [massAssignSede, setMassAssignSede] = useState<string>('all');
-  const [massAssignCargo, setMassAssignCargo] = useState<string>('all');
-  const [isMassAssigning, setIsMassAssigning] = useState(false);
 
   const currentSnapshot = useMemo(
     () =>
@@ -95,31 +79,6 @@ export default function AdminEditorCurso() {
 
   const hasUnsavedChanges = baselineSnapshot !== '' && baselineSnapshot !== currentSnapshot;
 
-  const activeUsers = useMemo(
-    () =>
-      allUsers.filter(
-        (u) => String(u?.estado || '').toLowerCase() === 'activo' && typeof u?.id === 'string'
-      ),
-    [allUsers]
-  );
-
-  const availableSedes = useMemo(() => {
-    const set = new Set<string>();
-    for (const user of activeUsers) {
-      const sede = String(user?.sede || '').trim();
-      if (sede) set.add(sede);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
-  }, [activeUsers]);
-
-  const availableCargos = useMemo(() => {
-    const set = new Set<string>();
-    for (const user of activeUsers) {
-      const cargo = String(user?.cargo || '').trim();
-      if (cargo) set.add(cargo);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
-  }, [activeUsers]);
 
   const redirectTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
@@ -157,7 +116,6 @@ export default function AdminEditorCurso() {
         setEditDescription('');
         setEditImage('');
         setEditModules([]);
-        setAssignedUserIds([]);
         setSelectedIndex(0);
         setBaselineSnapshot(
           JSON.stringify({
@@ -190,14 +148,9 @@ export default function AdminEditorCurso() {
         const loadedTitle = detail.title || '';
         const loadedDescription = detail.description || '';
         const loadedImage = detail.image || '';
-        const loadedAssignedUsers = Array.isArray(detail.alumnosInscritos)
-          ? detail.alumnosInscritos.map(String)
-          : [];
-
         setEditTitle(loadedTitle);
         setEditDescription(loadedDescription);
         setEditImage(loadedImage);
-        setAssignedUserIds(loadedAssignedUsers);
 
         const mapped: EditModulo[] = modulos.map((m) => {
           const tipo = (m.tipo || 'lectura') as ModuloTipo;
@@ -207,6 +160,7 @@ export default function AdminEditorCurso() {
               tituloModulo: m.tituloModulo || 'Módulo sin título',
               tipo,
               contenido: PRACTICA_PRESENCIAL_MESSAGE,
+              materialDescargable: m.materialDescargable,
             };
           }
 
@@ -236,6 +190,7 @@ export default function AdminEditorCurso() {
               tituloModulo: m.tituloModulo || 'Módulo sin título',
               tipo,
               contenido: { instrucciones: '' } satisfies LecturaContenido,
+              materialDescargable: m.materialDescargable,
             };
           }
 
@@ -247,6 +202,7 @@ export default function AdminEditorCurso() {
                 tituloModulo: m.tituloModulo || 'Módulo sin título',
                 tipo,
                 contenido: raw as QuizPregunta[],
+                materialDescargable: m.materialDescargable,
               };
             }
 
@@ -313,28 +269,6 @@ export default function AdminEditorCurso() {
     };
   }, [courseId, isNewCourse]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadUsers = async () => {
-      setIsLoadingUsers(true);
-
-      try {
-        const response = await userService.getUsers();
-        if (!isMounted) return;
-        setAllUsers(response.success && response.data ? response.data : []);
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingUsers(false);
-      }
-    };
-
-    loadUsers();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const updateModule = (index: number, patch: Partial<EditModulo>) => {
     setEditModules((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
@@ -380,90 +314,33 @@ export default function AdminEditorCurso() {
 
     const contenido: ModuloContenido = (() => {
       if (tipo === 'practica_presencial') return PRACTICA_PRESENCIAL_MESSAGE;
-      if (tipo === 'video') return (newModuleContent || '').trim();
+      if (tipo === 'video') return '';
       if (tipo === 'lectura') {
-        const instrucciones = (newModuleContent || '').trim();
-        const archivoNombre = (newModuleFileName || '').trim();
         return {
-          instrucciones: instrucciones || undefined,
-          archivoNombre: archivoNombre || undefined,
+          instrucciones: 'Escribe aquí las instrucciones de lectura...',
         } satisfies LecturaContenido;
       }
-      return newModuleQuiz;
+      return []; // Quiz vacío
     })();
 
     setEditModules((prev) => {
       const next = [...prev, { tituloModulo, tipo, contenido }];
-      setSelectedIndex(next.length - 1);
+      setSelectedIndex(next.length - 1); // Seleccionar el nuevo módulo automáticamente
+      
+      // Animación: Scroll al inicio del editor
+      setTimeout(() => {
+        editorScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+
       return next;
     });
 
     setNewModuleTitle('');
     setNewModuleType('lectura');
-    setNewModuleContent('');
-    setNewModuleFileName('');
-    setNewModuleQuiz([]);
   };
 
   const selectedModule = editModules[selectedIndex];
 
-  const handleMassAssign = async (mode: 'sede' | 'cargo') => {
-    if (!courseId || isMassAssigning) return;
-    if (!isAdminUser) {
-      toast.message('Solo un administrador puede inscribir usuarios.');
-      return;
-    }
-    if (isNewCourse) {
-      toast.message('Guarda el curso para poder inscribir usuarios.');
-      return;
-    }
-
-    const selectedValue = mode === 'sede' ? massAssignSede : massAssignCargo;
-    if (!selectedValue || selectedValue === 'all') {
-      toast.error(`Selecciona ${mode === 'sede' ? 'una sede' : 'un cargo'} para inscribir.`);
-      return;
-    }
-
-    const candidates = activeUsers.filter((user) => {
-      if (!user.id) return false;
-
-      if (mode === 'sede') {
-        return String(user.sede || '').trim() === selectedValue;
-      }
-
-      return String(user.cargo || '').trim() === selectedValue;
-    });
-
-    if (candidates.length === 0) {
-      toast.error('No se encontraron usuarios activos para ese filtro.');
-      return;
-    }
-
-    const candidateIds = candidates.map((u) => String(u.id));
-    const mergedIds = Array.from(new Set([...assignedUserIds, ...candidateIds]));
-
-    if (mergedIds.length === assignedUserIds.length) {
-      toast.message('Todos los usuarios de ese grupo ya estaban inscritos.');
-      return;
-    }
-
-    setIsMassAssigning(true);
-
-    try {
-      const response = await courseService.assignStudentsToCourse(courseId, mergedIds);
-      if (!response.success) {
-        toast.error(response.error || 'No se pudo realizar la asignación masiva.');
-        return;
-      }
-
-      setAssignedUserIds(mergedIds);
-
-      const addedCount = mergedIds.length - assignedUserIds.length;
-      toast.success(`Se inscribieron ${addedCount} usuario(s) por ${mode}.`);
-    } finally {
-      setIsMassAssigning(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!courseId || isRedirectingAfterSave) return;
@@ -476,6 +353,7 @@ export default function AdminEditorCurso() {
         tituloModulo: m.tituloModulo,
         tipo: m.tipo,
         contenido: m.tipo === 'practica_presencial' ? PRACTICA_PRESENCIAL_MESSAGE : m.contenido,
+        materialDescargable: m.materialDescargable,
       }));
 
       if (isNewCourse) {
@@ -508,7 +386,12 @@ export default function AdminEditorCurso() {
           titulo: editTitle,
           descripcion: editDescription,
           imagen: editImage,
-          modulos: modulosPayload,
+          modulos: editModules.map((m) => ({
+            tituloModulo: m.tituloModulo,
+            tipo: m.tipo,
+            contenido: m.contenido,
+            materialDescargable: m.materialDescargable,
+          })),
         });
 
         if (!response.success) {
@@ -726,79 +609,6 @@ export default function AdminEditorCurso() {
                   </div>
                 )}
 
-                {isAdminUser ? (
-                  <div className="pt-4 border-t space-y-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">Asignación masiva</div>
-                      <div className="text-xs text-gray-600">Inscribe usuarios activos por sede o por cargo</div>
-                    </div>
-
-                    <div className="rounded-md border p-3 bg-slate-50 space-y-3">
-                      <div className="text-xs text-gray-600">
-                        Inscritos actuales: <span className="font-semibold text-gray-800">{assignedUserIds.length}</span>
-                      </div>
-
-                      {isNewCourse ? (
-                        <div className="text-xs text-amber-700">
-                          Guarda el curso para habilitar la inscripción de usuarios.
-                        </div>
-                      ) : null}
-
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-gray-700">Por sede</div>
-                        <Select value={massAssignSede} onValueChange={setMassAssignSede}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona sede" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Selecciona sede</SelectItem>
-                            {availableSedes.map((sede) => (
-                              <SelectItem key={sede} value={sede}>
-                                {sede}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => void handleMassAssign('sede')}
-                          disabled={isNewCourse || isMassAssigning || isLoadingUsers || availableSedes.length === 0}
-                        >
-                          {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios de la sede'}
-                        </Button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-gray-700">Por cargo</div>
-                        <Select value={massAssignCargo} onValueChange={setMassAssignCargo}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona cargo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Selecciona cargo</SelectItem>
-                            {availableCargos.map((cargo) => (
-                              <SelectItem key={cargo} value={cargo}>
-                                {cargo}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => void handleMassAssign('cargo')}
-                          disabled={isNewCourse || isMassAssigning || isLoadingUsers || availableCargos.length === 0}
-                        >
-                          {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios del cargo'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between gap-2">
                     <div>
@@ -903,253 +713,10 @@ export default function AdminEditorCurso() {
                     </Select>
                   </div>
 
-                  <div>
-                    <div className="text-xs font-medium text-gray-700 mb-1">Contenido</div>
-
-                    {newModuleType === 'video' ? (
-                      <Input
-                        value={newModuleContent}
-                        onChange={(e) => setNewModuleContent(e.target.value)}
-                        placeholder="Pega aquí el link/embed del video"
-                        disabled={isSaving}
-                      />
-                    ) : newModuleType === 'practica_presencial' ? (
-                      <Textarea value={PRACTICA_PRESENCIAL_MESSAGE} disabled className="min-h-[90px]" />
-                    ) : newModuleType === 'lectura' ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-gray-600">
-                          El archivo es simulado: solo se guarda el nombre (no se sube el documento).
-                        </div>
-
-                        <Input
-                          type="file"
-                          disabled={isSaving}
-                          onChange={(e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            setNewModuleFileName(file?.name || '');
-                          }}
-                        />
-
-                        {newModuleFileName ? (
-                          <div className="text-xs text-gray-700">
-                            Archivo seleccionado: <span className="font-medium">{newModuleFileName}</span>
-                          </div>
-                        ) : null}
-
-                        <Textarea
-                          value={newModuleContent}
-                          onChange={(e) => setNewModuleContent(e.target.value)}
-                          className="min-h-[90px]"
-                          placeholder="Instrucciones de lectura"
-                          disabled={isSaving}
-                        />
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {newModuleQuiz.length === 0 ? (
-                          <div className="text-sm text-gray-600 rounded-md border p-3">Aún no hay preguntas.</div>
-                        ) : (
-                          <div className="space-y-3">
-                            {newModuleQuiz.map((q, qIndex) => (
-                              <div key={qIndex} className="rounded-md border p-3 space-y-3 bg-white">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="text-sm font-semibold text-gray-900">Pregunta {qIndex + 1}</div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setNewModuleQuiz((prev) => prev.filter((_, i) => i !== qIndex))}
-                                    disabled={isSaving}
-                                  >
-                                    Quitar
-                                  </Button>
-                                </div>
-
-                                <div className="grid sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <div className="text-xs font-medium text-gray-700 mb-1">Tipo</div>
-                                    <Select
-                                      value={q.tipo}
-                                      onValueChange={(v) => {
-                                        const nextTipo = v as QuizTipoPregunta;
-                                        setNewModuleQuiz((prev) =>
-                                          prev.map((qq, i) => {
-                                            if (i !== qIndex) return qq;
-                                            const base: QuizPregunta = { ...qq, tipo: nextTipo };
-                                            if (nextTipo === 'seleccion_multiple') {
-                                              return {
-                                                ...base,
-                                                opciones:
-                                                  Array.isArray(base.opciones) && base.opciones.length > 0
-                                                    ? base.opciones
-                                                    : [
-                                                        { texto: 'Opción 1', correcta: true },
-                                                        { texto: 'Opción 2', correcta: false },
-                                                      ],
-                                              };
-                                            }
-                                            return { ...base, opciones: undefined };
-                                          })
-                                        );
-                                      }}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Selecciona" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="seleccion_multiple">Selección múltiple</SelectItem>
-                                        <SelectItem value="respuesta_escrita">Respuesta escrita</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="text-xs font-medium text-gray-700 mb-1">Enunciado</div>
-                                  <Textarea
-                                    value={q.pregunta || ''}
-                                    onChange={(e) =>
-                                      setNewModuleQuiz((prev) =>
-                                        prev.map((qq, i) => (i === qIndex ? { ...qq, pregunta: e.target.value } : qq))
-                                      )
-                                    }
-                                    className="min-h-[70px]"
-                                    disabled={isSaving}
-                                  />
-                                </div>
-
-                                {q.tipo === 'seleccion_multiple' ? (
-                                  <div className="space-y-2">
-                                    <div className="text-xs font-medium text-gray-700">Opciones</div>
-                                    {(q.opciones || []).map((opt, optIndex) => (
-                                      <div key={optIndex} className="flex items-center gap-2">
-                                        <Checkbox
-                                          checked={!!opt.correcta}
-                                          onCheckedChange={() => {
-                                            setNewModuleQuiz((prev) =>
-                                              prev.map((qq, i) => {
-                                                if (i !== qIndex) return qq;
-                                                const opciones = (qq.opciones || []).map((oo, oi) => ({
-                                                  ...oo,
-                                                  correcta: oi === optIndex,
-                                                }));
-                                                return { ...qq, opciones };
-                                              })
-                                            );
-                                          }}
-                                          disabled={isSaving}
-                                        />
-                                        <Input
-                                          value={opt.texto || ''}
-                                          onChange={(e) => {
-                                            setNewModuleQuiz((prev) =>
-                                              prev.map((qq, i) => {
-                                                if (i !== qIndex) return qq;
-                                                const opciones = (qq.opciones || []).map((oo, oi) =>
-                                                  oi === optIndex ? { ...oo, texto: e.target.value } : oo
-                                                );
-                                                return { ...qq, opciones };
-                                              })
-                                            );
-                                          }}
-                                          placeholder={`Opción ${optIndex + 1}`}
-                                          disabled={isSaving}
-                                        />
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            setNewModuleQuiz((prev) =>
-                                              prev.map((qq, i) => {
-                                                if (i !== qIndex) return qq;
-                                                const before = qq.opciones || [];
-                                                const opciones = before.filter((_, oi) => oi !== optIndex);
-                                                if (opciones.length > 0 && !opciones.some((o) => o.correcta)) {
-                                                  opciones[0] = { ...opciones[0], correcta: true };
-                                                }
-                                                return { ...qq, opciones };
-                                              })
-                                            );
-                                          }}
-                                          disabled={isSaving}
-                                        >
-                                          −
-                                        </Button>
-                                      </div>
-                                    ))}
-
-                                    <div>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          setNewModuleQuiz((prev) =>
-                                            prev.map((qq, i) => {
-                                              if (i !== qIndex) return qq;
-                                              const opciones = [...(qq.opciones || [])];
-                                              opciones.push({
-                                                texto: `Opción ${opciones.length + 1}`,
-                                                correcta: opciones.length === 0,
-                                              });
-                                              return { ...qq, opciones };
-                                            })
-                                          );
-                                        }}
-                                        disabled={isSaving}
-                                      >
-                                        Añadir opción
-                                      </Button>
-                                    </div>
-
-                                    <div className="text-xs text-gray-600">
-                                      Marca con el check la opción correcta (solo una).
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="text-xs font-medium text-gray-700 mb-1">Respuesta modelo (opcional)</div>
-                                    <Textarea
-                                      value={q.respuestaModelo || ''}
-                                      onChange={(e) =>
-                                        setNewModuleQuiz((prev) =>
-                                          prev.map((qq, i) =>
-                                            i === qIndex ? { ...qq, respuestaModelo: e.target.value } : qq
-                                          )
-                                        )
-                                      }
-                                      className="min-h-[70px]"
-                                      disabled={isSaving}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div>
-                          <Button
-                            type="button"
-                            onClick={() => {
-                              setNewModuleQuiz((prev) => [
-                                ...prev,
-                                {
-                                  tipo: 'seleccion_multiple',
-                                  pregunta: '',
-                                  opciones: [
-                                    { texto: 'Opción 1', correcta: true },
-                                    { texto: 'Opción 2', correcta: false },
-                                  ],
-                                },
-                              ]);
-                            }}
-                            disabled={isSaving}
-                          >
-                            Añadir pregunta
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                  <div className="pt-2">
+                    <p className="text-[10px] text-gray-500 italic">
+                      * Una vez añadido, podrás editar todo su contenido en el panel de la derecha.
+                    </p>
                   </div>
 
                   <div className="flex justify-end">
@@ -1161,7 +728,7 @@ export default function AdminEditorCurso() {
               </div>
             </aside>
 
-            <section className="flex-1 overflow-y-auto">
+            <section ref={editorScrollRef} className="flex-1 overflow-y-auto scroll-smooth">
               <div className="p-6">
                 {isLoading ? (
                   <Card className="animate-pulse">
@@ -1260,31 +827,20 @@ export default function AdminEditorCurso() {
                           ) : selectedModule.tipo === 'practica_presencial' ? (
                             <Textarea value={PRACTICA_PRESENCIAL_MESSAGE} disabled className="min-h-[90px]" />
                           ) : selectedModule.tipo === 'lectura' ? (
-                            <div className="space-y-2">
+                            <div className="space-y-4">
                               <div className="text-xs text-gray-600">
-                                El archivo es simulado: solo se guarda el nombre (no se sube el documento).
+                                Sube un archivo (PDF, Excel, PPT, Imagen) para que los alumnos lo descarguen.
                               </div>
 
-                              <Input
-                                type="file"
-                                disabled={isSaving}
-                                onChange={(e) => {
-                                  const file = (e.target as HTMLInputElement).files?.[0];
-                                  const current: LecturaContenido = isPlainObject(selectedModule.contenido)
-                                    ? (selectedModule.contenido as LecturaContenido)
-                                    : typeof selectedModule.contenido === 'string'
-                                      ? { instrucciones: selectedModule.contenido }
-                                      : { instrucciones: '' };
+                              {/* Estado de carga */}
+                              {isUploadingMaterial && (
+                                <div className="flex items-center gap-2 text-sm text-blue-600 animate-pulse font-bold bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                  SUBIENDO ARCHIVO... Por favor espera.
+                                </div>
+                              )}
 
-                                  updateModule(selectedIndex, {
-                                    contenido: {
-                                      ...current,
-                                      archivoNombre: file?.name || undefined,
-                                    } satisfies LecturaContenido,
-                                  });
-                                }}
-                              />
-
+                              {/* Archivo ya subido o vinculado */}
                               {(() => {
                                 const current: LecturaContenido = isPlainObject(selectedModule.contenido)
                                   ? (selectedModule.contenido as LecturaContenido)
@@ -1292,40 +848,107 @@ export default function AdminEditorCurso() {
                                     ? { instrucciones: selectedModule.contenido }
                                     : { instrucciones: '' };
 
-                                return current.archivoNombre ? (
-                                  <div className="text-xs text-gray-700">
-                                    Archivo seleccionado: <span className="font-medium">{current.archivoNombre}</span>
+                                return (selectedModule.materialDescargable || current.archivoNombre) ? (
+                                  <div className="flex items-center p-4 rounded-xl border-2 border-green-200 bg-green-50 text-green-900 shadow-md transition-all">
+                                    <div className="p-2.5 bg-green-200 rounded-xl mr-4 shadow-sm">
+                                      <svg className="w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-black truncate uppercase tracking-tight">
+                                        {current.archivoNombre || 'Archivo vinculado'}
+                                      </p>
+                                      <p className="text-[11px] font-medium text-green-700">✅ Archivo listo en la nube</p>
+                                    </div>
+                                    <Button 
+                                      variant="destructive" 
+                                      size="sm" 
+                                      className="h-8 shadow-sm ml-2"
+                                      onClick={() => {
+                                         updateModule(selectedIndex, {
+                                           materialDescargable: undefined,
+                                           contenido: { ...current, archivoNombre: undefined }
+                                         });
+                                      }}
+                                    >
+                                      Quitar
+                                    </Button>
                                   </div>
-                                ) : null;
+                                ) : (
+                                  <div className="relative">
+                                    <Input
+                                      type="file"
+                                      disabled={isSaving || isUploadingMaterial}
+                                      className="cursor-pointer file:bg-blue-50 file:text-blue-700 file:border-0 file:rounded-md file:px-4 file:py-1 file:mr-4 file:font-bold hover:file:bg-blue-100 transition-all"
+                                      onChange={async (e) => {
+                                        const file = (e.target as HTMLInputElement).files?.[0];
+                                        if (!file) return;
+
+                                        setIsUploadingMaterial(true);
+                                        try {
+                                          const res = await courseService.uploadModuleMaterial(file);
+                                          if (res.success && res.data) {
+                                            const cur: LecturaContenido = isPlainObject(selectedModule.contenido)
+                                              ? (selectedModule.contenido as LecturaContenido)
+                                              : typeof selectedModule.contenido === 'string'
+                                                ? { instrucciones: selectedModule.contenido }
+                                                : { instrucciones: '' };
+
+                                            updateModule(selectedIndex, {
+                                              materialDescargable: res.data.url,
+                                              contenido: {
+                                                ...cur,
+                                                archivoNombre: file.name,
+                                              } satisfies LecturaContenido,
+                                            });
+                                            toast.success('¡Archivo subido con éxito!');
+                                          } else {
+                                            toast.error(res.error || 'Error al subir');
+                                          }
+                                        } catch (err) {
+                                          console.error(err);
+                                          toast.error('Error crítico al subir');
+                                        } finally {
+                                          setIsUploadingMaterial(false);
+                                          e.target.value = '';
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                );
                               })()}
 
-                              <Textarea
-                                value={(() => {
-                                  const current: LecturaContenido = isPlainObject(selectedModule.contenido)
-                                    ? (selectedModule.contenido as LecturaContenido)
-                                    : typeof selectedModule.contenido === 'string'
-                                      ? { instrucciones: selectedModule.contenido }
-                                      : { instrucciones: '' };
-                                  return current.instrucciones || '';
-                                })()}
-                                onChange={(e) => {
-                                  const current: LecturaContenido = isPlainObject(selectedModule.contenido)
-                                    ? (selectedModule.contenido as LecturaContenido)
-                                    : typeof selectedModule.contenido === 'string'
-                                      ? { instrucciones: selectedModule.contenido }
-                                      : { instrucciones: '' };
+                              <div>
+                                <div className="text-xs font-medium text-gray-700 mb-1">Instrucciones para el alumno</div>
+                                <Textarea
+                                  value={(() => {
+                                    const current: LecturaContenido = isPlainObject(selectedModule.contenido)
+                                      ? (selectedModule.contenido as LecturaContenido)
+                                      : typeof selectedModule.contenido === 'string'
+                                        ? { instrucciones: selectedModule.contenido }
+                                        : { instrucciones: '' };
+                                    return current.instrucciones || '';
+                                  })()}
+                                  onChange={(e) => {
+                                    const current: LecturaContenido = isPlainObject(selectedModule.contenido)
+                                      ? (selectedModule.contenido as LecturaContenido)
+                                      : typeof selectedModule.contenido === 'string'
+                                        ? { instrucciones: selectedModule.contenido }
+                                        : { instrucciones: '' };
 
-                                  updateModule(selectedIndex, {
-                                    contenido: {
-                                      ...current,
-                                      instrucciones: e.target.value,
-                                    } satisfies LecturaContenido,
-                                  });
-                                }}
-                                className="min-h-[120px]"
-                                placeholder="Instrucciones de lectura"
-                                disabled={isSaving}
-                              />
+                                    updateModule(selectedIndex, {
+                                      contenido: {
+                                        ...current,
+                                        instrucciones: e.target.value,
+                                      } satisfies LecturaContenido,
+                                    });
+                                  }}
+                                  className="min-h-[120px] shadow-sm"
+                                  placeholder="Escribe aquí las instrucciones de lectura..."
+                                  disabled={isSaving}
+                                />
+                              </div>
                             </div>
                           ) : (
                             <div className="space-y-3">

@@ -13,10 +13,24 @@ import {
   ShieldAlert,
   Users,
   UserCog,
-  Building2
+  Building2,
+  FileArchive,
+  Download
 } from 'lucide-react';
-import { BACKEND_URL } from '../config/api.config';
+import { BACKEND_URL, buildApiUrl } from '../config/api.config';
 import { userService } from '../services/apiService';
+import { toast } from 'sonner';
+import { Checkbox } from '../components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { ScrollArea } from '../components/ui/scroll-area';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
@@ -25,6 +39,10 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [logoOk, setLogoOk] = useState(true);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
+  const [isBulkDownloadOpen, setIsBulkDownloadOpen] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -45,7 +63,20 @@ export default function AdminDashboard() {
       }
     };
 
+    const loadCourses = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/api/cursos?all=true'), {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await response.json();
+        if (mounted && Array.isArray(data)) setCourses(data);
+      } catch (err) {
+        console.error('Error cargando cursos:', err);
+      }
+    };
+
     loadPendingUsers();
+    loadCourses();
 
     return () => {
       mounted = false;
@@ -55,6 +86,46 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedCourseIds.length === 0) {
+      toast.error('Selecciona al menos un curso');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(buildApiUrl('/api/cursos/certificados/descarga-masiva'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ cursoIds: selectedCourseIds.map(Number) })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Error al generar la descarga');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `certificados_alumco_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Descarga iniciada con éxito');
+      setIsBulkDownloadOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Error en la descarga');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -297,7 +368,100 @@ export default function AdminDashboard() {
               <p className="text-gray-600">Administra tu información, firma y descarga tus certificados.</p>
             </CardContent>
           </Card>
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer border-blue-200 bg-blue-50/30"
+            role="button"
+            tabIndex={0}
+            onClick={() => setIsBulkDownloadOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') setIsBulkDownloadOpen(true);
+            }}
+          >
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-600 rounded-lg">
+                  <FileArchive className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <CardTitle>Descarga Masiva</CardTitle>
+                  <CardDescription>Certificados en ZIP</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">Descarga todos los certificados de uno o varios cursos para auditorías.</p>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Diálogo Descarga Masiva */}
+        <Dialog open={isBulkDownloadOpen} onOpenChange={setIsBulkDownloadOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Descarga Masiva de Certificados</DialogTitle>
+              <DialogDescription>
+                Selecciona los cursos de los cuales deseas descargar todas las certificaciones emitidas.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="py-4">
+              <Label className="text-xs font-semibold text-gray-500 uppercase mb-3 block">
+                Cursos Disponibles ({courses.length})
+              </Label>
+              <ScrollArea className="h-64 border rounded-md p-2">
+                <div className="space-y-2">
+                  {courses.map((course) => (
+                    <div key={course.id} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-md transition-colors border-b last:border-0 border-gray-100">
+                      <Checkbox 
+                        id={`course-${course.id}`}
+                        checked={selectedCourseIds.includes(String(course.id))}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedCourseIds(prev => [...prev, String(course.id)]);
+                          } else {
+                            setSelectedCourseIds(prev => prev.filter(id => id !== String(course.id)));
+                          }
+                        }}
+                      />
+                      <label 
+                        htmlFor={`course-${course.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                      >
+                        {course.titulo}
+                      </label>
+                    </div>
+                  ))}
+                  {courses.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-8">No hay cursos disponibles.</p>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <DialogFooter className="flex sm:justify-between items-center gap-4">
+              <div className="text-xs text-gray-500 italic">
+                {selectedCourseIds.length} curso(s) seleccionado(s)
+              </div>
+              <Button 
+                onClick={handleBulkDownload} 
+                disabled={isDownloading || selectedCourseIds.length === 0}
+                className="bg-blue-600 hover:bg-blue-700 min-w-[140px]"
+              >
+                {isDownloading ? (
+                  <>
+                    <Settings className="w-4 h-4 animate-spin mr-2" />
+                    Generando ZIP...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar ZIP
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

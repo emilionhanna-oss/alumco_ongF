@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import * as xlsx from 'xlsx';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
@@ -12,10 +13,19 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
-import { GraduationCap, LogOut, Users, ChevronLeft } from 'lucide-react';
+import { Label } from '../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { GraduationCap, LogOut, Users, ChevronLeft, Loader2, FileUp } from 'lucide-react';
 import { courseService, userService } from '../services/apiService';
+import { toast } from 'sonner';
 import type { Course, User } from '../types';
-import { BACKEND_URL } from '../config/api.config';
+import { BACKEND_URL, buildApiUrl } from '../config/api.config';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
@@ -42,6 +52,9 @@ export default function AdminGestionCapacitaciones() {
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [createCourseError, setCreateCourseError] = useState<string | null>(null);
 
+  const [massAssignSede, setMassAssignSede] = useState<string>('all');
+  const [massAssignCargo, setMassAssignCargo] = useState<string>('all');
+
   const usersById = useMemo(() => {
     const map = new Map<string, User>();
     for (const u of users) {
@@ -49,6 +62,29 @@ export default function AdminGestionCapacitaciones() {
     }
     return map;
   }, [users]);
+
+  const activeUsers = useMemo(
+    () => users.filter(u => String(u?.estado || '').toLowerCase() === 'activo'),
+    [users]
+  );
+
+  const availableSedes = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of activeUsers) {
+      const s = String(u.sede || '').trim();
+      if (s) set.add(s);
+    }
+    return Array.from(set).sort();
+  }, [activeUsers]);
+
+  const availableCargos = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of activeUsers) {
+      const c = String(u.cargo || '').trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort();
+  }, [activeUsers]);
 
   useEffect(() => {
     const loadCourses = async () => {
@@ -109,6 +145,8 @@ export default function AdminGestionCapacitaciones() {
     setIsDialogOpen(false);
     setSelectedCourse(null);
     setSelectedUserIds([]);
+    setMassAssignSede('all');
+    setMassAssignCargo('all');
   };
 
   const toggleUser = (userId: string) => {
@@ -129,10 +167,99 @@ export default function AdminGestionCapacitaciones() {
         setIsDialogOpen(false);
         setSelectedCourse(null);
         setSelectedUserIds([]);
+        toast.success('Usuarios asignados correctamente');
+      } else {
+        toast.error(response.error || 'Error al asignar usuarios');
       }
+    } catch (err) {
+      toast.error('Error de conexión');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  const downloadTemplate = () => {
+    const ws = xlsx.utils.json_to_sheet([
+      { RUT: '12.345.678-9', Email: 'ejemplo@correo.com' }
+    ]);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "FormatoInscripcion");
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "formato_inscripcion_alumco.xlsx";
+    a.click();
+    window.URL.revokeObjectURL(url);
+    setIsHelpOpen(false);
+  };
+
+  const triggerFileUpload = () => {
+    setIsHelpOpen(false);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      setIsSaving(true);
+      try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch(buildApiUrl(`/api/cursos/${selectedCourse.id}/inscripcion-masiva`), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          toast.success(`Carga completada: ${data.inscritos} nuevos inscritos`);
+          if (data.alumnosActualizados) {
+            setSelectedUserIds(data.alumnosActualizados);
+          }
+          const updatedRes = await courseService.getCourses({ all: true });
+          if (updatedRes.success && updatedRes.data) {
+            let allCourses = updatedRes.data;
+            if (isProfesor && user?.id) {
+              allCourses = allCourses.filter(c => String(c.instructorId) === String(user.id));
+            }
+            setCourses(allCourses);
+          }
+        } else {
+          toast.error(data.error || 'Error en la carga masiva');
+        }
+      } catch (err) {
+        toast.error('Error al conectar con el servidor');
+      } finally {
+        setIsSaving(false);
+      }
+    };
+    input.click();
+  };
+
+  const handleMassAssignFilter = (mode: 'sede' | 'cargo') => {
+    const val = mode === 'sede' ? massAssignSede : massAssignCargo;
+    if (!val || val === 'all') return;
+
+    const filtered = activeUsers.filter(u => 
+      mode === 'sede' ? String(u.sede) === val : String(u.cargo) === val
+    );
+    
+    if (filtered.length === 0) {
+      toast.error('No se encontraron usuarios activos con ese filtro');
+      return;
+    }
+
+    const newIds = filtered.map(u => String(u.id));
+    setSelectedUserIds(prev => Array.from(new Set([...prev, ...newIds])));
+    toast.success(`Añadidos ${filtered.length} usuarios por ${mode}`);
   };
 
   const enrolledCount = (course: Course) =>
@@ -294,15 +421,14 @@ export default function AdminGestionCapacitaciones() {
                   </div>
 
                   <div className={`mt-3 grid gap-2 ${isProfesor ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                    {!isProfesor && (
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        onClick={() => openAssignDialog(course)}
-                      >
-                        Asignar usuarios
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant={isProfesor ? 'outline' : 'default'}
+                      className="w-full"
+                      onClick={() => openAssignDialog(course)}
+                    >
+                      Asignar usuarios
+                    </Button>
                     <Button
                       size="sm"
                       variant={isProfesor ? 'default' : 'outline'}
@@ -324,17 +450,64 @@ export default function AdminGestionCapacitaciones() {
         <Dialog open={isDialogOpen} onOpenChange={(open) => (open ? setIsDialogOpen(true) : closeAssignDialog())}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
-              <DialogTitle>Asignar usuarios</DialogTitle>
-              <DialogDescription>
-                {selectedCourse?.title ? (
-                  <span>
-                    Curso: <strong>{selectedCourse.title}</strong>
-                  </span>
-                ) : (
-                  'Selecciona los usuarios que quedarán inscritos en este curso.'
-                )}
-              </DialogDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle>Asignar usuarios</DialogTitle>
+                  <DialogDescription>
+                    {selectedCourse?.title ? (
+                      <span>
+                        Curso: <strong>{selectedCourse.title}</strong>
+                      </span>
+                    ) : (
+                      'Selecciona los usuarios que quedarán inscritos en este curso.'
+                    )}
+                  </DialogDescription>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs flex items-center gap-2 border-green-200 hover:bg-green-50 text-green-700"
+                  onClick={() => setIsHelpOpen(true)}
+                  disabled={isSaving}
+                >
+                  <FileUp className="w-3.5 h-3.5" />
+                  Carga Masiva (Excel)
+                </Button>
+              </div>
             </DialogHeader>
+
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-gray-500">Filtrar por Sede</Label>
+                <div className="flex gap-2">
+                  <Select value={massAssignSede} onValueChange={setMassAssignSede}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Sede..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Sede...</SelectItem>
+                      {availableSedes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="secondary" className="h-8 px-2" onClick={() => handleMassAssignFilter('sede')}>+</Button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-gray-500">Filtrar por Cargo</Label>
+                <div className="flex gap-2">
+                  <Select value={massAssignCargo} onValueChange={setMassAssignCargo}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Cargo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Cargo...</SelectItem>
+                      {availableCargos.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="secondary" className="h-8 px-2" onClick={() => handleMassAssignFilter('cargo')}>+</Button>
+                </div>
+              </div>
+            </div>
 
             {isLoadingUsers ? (
               <div className="text-sm text-gray-600">Cargando usuarios\u2026</div>
@@ -375,9 +548,47 @@ export default function AdminGestionCapacitaciones() {
                 Cancelar
               </Button>
               <Button onClick={handleSaveAssignments} disabled={isSaving || !selectedCourse?.id}>
-                {isSaving ? 'Guardando\u2026' : 'Guardar asignación'}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  'Guardar asignación'
+                )}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Diálogo de Ayuda Formato */}
+        <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Asistente de Carga Masiva</DialogTitle>
+              <DialogDescription>
+                Para inscribir alumnos masivamente, necesitas un archivo Excel con el formato correcto.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg border p-4 bg-slate-50">
+                <h4 className="text-sm font-semibold mb-2">Formato Requerido:</h4>
+                <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
+                  <li>Archivo tipo Excel (.xlsx)</li>
+                  <li>Columna llamada <strong>RUT</strong> o <strong>Email</strong></li>
+                  <li>Los usuarios deben estar registrados previamente en el sistema</li>
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="flex flex-col h-auto py-4 gap-2" onClick={downloadTemplate}>
+                  <FileUp className="w-6 h-6 text-green-600" />
+                  <span className="text-xs font-bold">Descargar Plantilla</span>
+                </Button>
+                <Button className="flex flex-col h-auto py-4 gap-2" onClick={triggerFileUpload}>
+                  <Users className="w-6 h-6 text-white" />
+                  <span className="text-xs font-bold">Ya tengo mi archivo</span>
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </main>

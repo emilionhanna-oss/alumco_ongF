@@ -1,5 +1,6 @@
 // src/controllers/courseController.js
 const db = require('../db');
+const xlsx = require('xlsx');
 
 function normalizeRoles(raw) {
   if (Array.isArray(raw)) return raw.map(String);
@@ -54,9 +55,10 @@ async function getModulosByCurso(cursoId, userId = null) {
   }
 
   const result = await db.query(
-    `SELECT m.*, pm.completado 
+    `SELECT m.*, pm.completado, ppe.estado as practica_estado
      FROM modulos m 
      LEFT JOIN progreso_modulos pm ON m.id = pm.modulo_id AND pm.usuario_id = $2 
+     LEFT JOIN practica_presencial_evaluaciones ppe ON m.id = ppe.modulo_id AND ppe.usuario_id = $2
      WHERE m.curso_id = $1 
      ORDER BY m.orden ASC`,
     [cursoId, userId]
@@ -68,6 +70,7 @@ async function getModulosByCurso(cursoId, userId = null) {
     contenido:           m.contenido || null,
     materialDescargable: m.material_url || null,
     completado:          Boolean(m.completado),
+    practicaEstado:      m.practica_estado || null,
   }));
 }
 
@@ -131,7 +134,8 @@ function sanitizeModulos(raw, existing = []) {
       else if (tipo === 'lectura') contenido = sanitizeLecturaContenido(rawContenido);
       else if (tipo === 'quiz')    contenido = sanitizeQuizContenido(rawContenido);
       else                         contenido = asTrimmedString(rawContenido) ?? '';
-      return { ...ex, tituloModulo, tipo, contenido };
+      const material_url = asTrimmedString(m.materialDescargable) || asTrimmedString(ex.materialDescargable) || null;
+      return { ...ex, tituloModulo, tipo, contenido, material_url };
     });
 }
 
@@ -321,6 +325,7 @@ const actualizarCurso = async (req, res) => {
         tituloModulo: m.titulo,
         tipo:         m.tipo,
         contenido:    m.contenido || null,
+        materialDescargable: m.material_url || null,
       }));
       const sanitized = sanitizeModulos(modulos, existingModulos);
 
@@ -342,14 +347,14 @@ const actualizarCurso = async (req, res) => {
             const existingId = existingRows[idx].id;
             keepIds.add(existingId);
             await db.query(
-              'UPDATE modulos SET titulo = $1, tipo = $2, contenido = $3, orden = $4 WHERE id = $5',
-              [m.tituloModulo, m.tipo, JSON.stringify(m.contenido), idx, existingId]
+              'UPDATE modulos SET titulo = $1, tipo = $2, contenido = $3, orden = $4, material_url = $5 WHERE id = $6',
+              [m.tituloModulo, m.tipo, JSON.stringify(m.contenido), idx, m.material_url, existingId]
             );
           } else {
             // Insert new module
             await db.query(
-              'INSERT INTO modulos (curso_id, titulo, tipo, contenido, orden) VALUES ($1,$2,$3,$4,$5)',
-              [id, m.tituloModulo, m.tipo, JSON.stringify(m.contenido), idx]
+              'INSERT INTO modulos (curso_id, titulo, tipo, contenido, orden, material_url) VALUES ($1,$2,$3,$4,$5,$6)',
+              [id, m.tituloModulo, m.tipo, JSON.stringify(m.contenido), idx, m.material_url]
             );
           }
         }
@@ -462,4 +467,81 @@ const completarModuloManual = async (req, res) => {
   }
 };
 
-module.exports = { listarCursos, obtenerCursoPorId, crearCurso, asignarAlumnos, actualizarCurso, eliminarCurso, completarModuloManual };
+const solicitarPractica = async (req, res) => {
+  try {
+    const { moduloId } = req.params;
+    const userId = req.user.id;
+
+    // Insertar solicitud en estado pendiente
+    await db.query(
+      `INSERT INTO practica_presencial_evaluaciones (usuario_id, modulo_id, estado)
+       VALUES ($1, $2, 'pendiente')
+       ON CONFLICT (usuario_id, modulo_id) DO NOTHING`,
+      [userId, moduloId]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Error al solicitar practica:', err);
+    res.status(500).json({ error: 'Error interno' });
+  }
+};
+
+const inscripcionMasiva = async (req, res) => {
+  try {
+    const { id: cursoId } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No se subió ningún archivo' });
+    }
+
+    const workbook = xlsx.read(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    let inscritos = 0;
+    for (const row of data) {
+      // Intentar obtener identificador por columnas comunes
+      const ident = (row['Email'] || row['email'] || row['Correo'] || row['RUT'] || row['rut'] || '').toString().trim();
+      if (!ident) continue;
+
+      // Buscar usuario
+      const userRes = await db.query('SELECT id FROM usuarios WHERE email = $1 OR rut = $2', [ident, ident]);
+      if (userRes.rows.length > 0) {
+        const userId = userRes.rows[0].id;
+        // Inscribir
+        const insRes = await db.query(
+          'INSERT INTO inscripciones (usuario_id, curso_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [userId, cursoId]
+        );
+        if (insRes.rowCount > 0) {
+          inscritos++;
+        }
+      }
+    }
+
+    // Obtener lista actualizada de IDs para el frontend
+    const alumnos = await getAlumnosByCurso(cursoId);
+    
+    return res.json({ 
+      success: true, 
+      inscritos, 
+      alumnosActualizados: alumnos
+    });
+  } catch (error) {
+    console.error('Error en inscripción masiva:', error);
+    res.status(500).json({ success: false, error: 'Error procesando la inscripción masiva' });
+  }
+};
+
+module.exports = {
+  listarCursos,
+  obtenerCursoPorId,
+  crearCurso,
+  actualizarCurso,
+  eliminarCurso,
+  asignarAlumnos,
+  completarModuloManual,
+  solicitarPractica,
+  inscripcionMasiva
+};

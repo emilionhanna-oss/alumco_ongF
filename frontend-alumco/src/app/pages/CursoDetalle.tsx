@@ -1,11 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { buildApiUrl, API_CONFIG } from '../config/api.config';
-import { userService } from '../services/apiService';
+import { userService, courseService } from '../services/apiService';
 import { QuizResponder } from '../components/quiz';
 import type { CursoBackend, CursoModulo } from '../types';
+import { 
+  FileText, Download, CheckCircle2, ChevronLeft, Lock, ArrowRight, 
+  PlayCircle, BookOpen, ClipboardList, Clock, UserCheck, AlertTriangle, Send,
+  Loader2
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 type LoadState =
   | { status: 'loading' }
@@ -71,6 +77,8 @@ export default function CursoDetalle() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [hasProfileSignature, setHasProfileSignature] = useState(false);
   const [viendoQuizModuloId, setViendoQuizModuloId] = useState<string | null>(null);
+  const [isMarkingReady, setIsMarkingReady] = useState<number | null>(null);
+  const [isDownloadingCert, setIsDownloadingCert] = useState(false);
 
   const backTo = useMemo(() => {
     const raw = (location.state as any)?.from;
@@ -95,52 +103,43 @@ export default function CursoDetalle() {
 
   const cursoId = useMemo(() => (id ? String(id) : ''), [id]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadCurso = useCallback(async (showLoading = true) => {
+    if (!cursoId) {
+      setState({ status: 'error', message: 'Falta el ID del curso.' });
+      return;
+    }
 
-    const load = async () => {
-      if (!cursoId) {
-        setState({ status: 'error', message: 'Falta el ID del curso.' });
-        return;
-      }
+    if (showLoading) setState({ status: 'loading' });
 
-      setState({ status: 'loading' });
+    try {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(cursoId)), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
 
-      try {
-        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(cursoId)), {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        });
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Curso no encontrado. Verifica el ID en la URL.');
-          }
-          throw new Error(`Error del servidor (${response.status}).`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Curso no encontrado. Verifica el ID en la URL.');
         }
-
-        const data = (await response.json()) as CursoBackend;
-
-        if (!isMounted) return;
-        setState({ status: 'ready', curso: data });
-      } catch (error) {
-        if (!isMounted) return;
-        setState({
-          status: 'error',
-          message: error instanceof Error ? error.message : 'No se pudo cargar el curso.',
-        });
+        throw new Error(`Error del servidor (${response.status}).`);
       }
-    };
 
-    load();
-
-    return () => {
-      isMounted = false;
-    };
+      const data = (await response.json()) as CursoBackend;
+      setState({ status: 'ready', curso: data });
+    } catch (error) {
+      setState({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'No se pudo cargar el curso.',
+      });
+    }
   }, [cursoId]);
+
+  useEffect(() => {
+    loadCurso();
+  }, [loadCurso]);
 
   useEffect(() => {
     let isMounted = true;
@@ -234,6 +233,7 @@ export default function CursoDetalle() {
     : Math.max(0, Math.min(100, Number(curso.progreso ?? 0)));
 
   const handleMarcarListo = async (moduloId: number) => {
+    setIsMarkingReady(moduloId);
     try {
       const token = localStorage.getItem('token') || '';
       const res = await fetch(buildApiUrl(`/api/cursos/${curso.id}/modulos/${moduloId}/completar`), {
@@ -241,13 +241,62 @@ export default function CursoDetalle() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        window.location.reload();
+        toast.success('¡Módulo completado!');
+        loadCurso(false);
       } else {
-        alert('Error al marcar el módulo como completado.');
+        const data = await res.json();
+        toast.error(data.error || 'Error al marcar el módulo');
+      }
+    } catch (err) {
+      toast.error('Error de conexión');
+    } finally {
+      setIsMarkingReady(null);
+    }
+  };
+
+  const handleDownloadCertificado = async () => {
+    setIsDownloadingCert(true);
+    try {
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(cursoId)) + '/certificado', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'No se pudo descargar el certificado');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Certificado_${curso.titulo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Certificado descargado con éxito');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al descargar');
+    } finally {
+      setIsDownloadingCert(false);
+    }
+  };
+
+  const handleSolicitarPractica = async (moduloId: number) => {
+    try {
+      const res = await courseService.solicitarPractica(moduloId);
+      if (res.success) {
+        toast.success('Solicitud enviada al instructor');
+        // Actualización fluida sin recarga
+        loadCurso(false);
+      } else {
+        toast.error(res.error || 'No se pudo enviar la solicitud');
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión.');
+      toast.error('Error al conectar con el servidor');
     }
   };
 
@@ -303,27 +352,22 @@ export default function CursoDetalle() {
                   Ya puedes descargar tu certificado de participación.
                 </div>
               </div>
-              <Button onClick={() => {
-                const token = localStorage.getItem('token') || '';
-                fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(cursoId)) + '/certificado', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                })
-                .then(res => {
-                  if (!res.ok) throw new Error('Error al descargar el certificado');
-                  return res.blob();
-                })
-                .then(blob => {
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `Certificado_${curso.titulo}.pdf`;
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  window.URL.revokeObjectURL(url);
-                })
-                .catch(err => alert(err.message));
-              }}>Descargar Certificado</Button>
+              <Button 
+                onClick={handleDownloadCertificado}
+                disabled={isDownloadingCert}
+              >
+                {isDownloadingCert ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar Certificado
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -412,7 +456,7 @@ export default function CursoDetalle() {
                     </div>
                     {modulo.materialDescargable ? (
                       <a
-                        href={modulo.materialDescargable}
+                        href={modulo.materialDescargable.startsWith('/') ? buildApiUrl(modulo.materialDescargable) : modulo.materialDescargable}
                         target="_blank"
                         rel="noreferrer"
                         className="text-sm text-blue-600 hover:underline"
@@ -472,25 +516,159 @@ export default function CursoDetalle() {
                           : { instrucciones: '' };
 
                       return (
-                        <div className="space-y-3">
-                          {lectura.archivoNombre ? (
-                            <div className="text-sm text-gray-700">
-                              Documento: <span className="font-medium">{lectura.archivoNombre}</span>
-                            </div>
-                          ) : null}
-
+                        <div className="space-y-4">
                           <div className="prose max-w-none">
                             <p className="whitespace-pre-line text-gray-800 leading-relaxed">
                               {lectura.instrucciones || 'Sin instrucciones de lectura.'}
                             </p>
                           </div>
+
+                          {/* Material Descargable / Visor de PDF */}
+                          {modulo.materialDescargable && (
+                            <div className="mt-4 space-y-4">
+                              {modulo.materialDescargable.toLowerCase().endsWith('.pdf') ? (
+                                <div className="rounded-xl overflow-hidden border border-gray-200 shadow-lg bg-gray-100 transition-all hover:shadow-xl">
+                                  <div className="bg-gray-800 p-2.5 flex justify-between items-center">
+                                    <span className="text-xs text-white font-medium ml-2 flex items-center">
+                                      <FileText className="w-4 h-4 mr-2 text-red-400" /> 
+                                      Documento de Lectura (PDF)
+                                    </span>
+                                    <div className="flex gap-3">
+                                      <a 
+                                        href={buildApiUrl(modulo.materialDescargable)} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-blue-300 hover:text-blue-200 underline"
+                                      >
+                                        Pantalla Completa
+                                      </a>
+                                      <a 
+                                        href={buildApiUrl(modulo.materialDescargable)} 
+                                        download
+                                        className="text-xs text-green-300 hover:text-green-200 underline"
+                                      >
+                                        Descargar
+                                      </a>
+                                    </div>
+                                  </div>
+                                  <iframe 
+                                    src={buildApiUrl(modulo.materialDescargable)} 
+                                    className="w-full h-[600px] border-none"
+                                    title="Visor de Material"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center p-4 rounded-xl border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 transition-colors">
+                                  <div className="p-3 bg-blue-100 rounded-xl mr-4 text-blue-600 shadow-sm">
+                                    <Download className="w-6 h-6" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-bold text-blue-900">
+                                      {lectura.archivoNombre || 'Material de apoyo'}
+                                    </p>
+                                    <p className="text-xs text-blue-700">Recurso descargable (Excel, PPT, Imagen)</p>
+                                  </div>
+                                  <Button 
+                                    variant="default" 
+                                    size="sm" 
+                                    className="bg-blue-600 hover:bg-blue-700 shadow-md"
+                                    asChild
+                                  >
+                                    <a href={buildApiUrl(modulo.materialDescargable)} target="_blank" rel="noopener noreferrer">
+                                      <Download className="w-4 h-4 mr-2" />
+                                      Descargar
+                                    </a>
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })()
                   ) : modulo.tipo === 'practica_presencial' ? (
-                    <div className="rounded-lg border bg-amber-50 p-4">
-                      <p className="text-sm font-semibold text-amber-900">Práctica Presencial</p>
-                      <p className="text-sm text-amber-900/90 mt-2 whitespace-pre-line">{PRACTICA_PRESENCIAL_MESSAGE}</p>
+                    <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50/30 p-0 shadow-sm transition-all hover:shadow-md">
+                      {/* Cabecera del Ticket */}
+                      <div className="flex items-center justify-between bg-amber-500 px-6 py-3 text-white">
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="w-5 h-5" />
+                          <span className="text-sm font-black uppercase tracking-wider">Módulo de Práctica Presencial</span>
+                        </div>
+                        <div className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase backdrop-blur-sm">
+                          Fase Final
+                        </div>
+                      </div>
+
+                      <div className="p-6">
+                        <div className="grid gap-6 md:grid-cols-[1fr_200px]">
+                          {/* Información */}
+                          <div className="space-y-4">
+                            <h3 className="text-xl font-bold text-amber-900">Evaluación de Competencias</h3>
+                            <p className="text-sm leading-relaxed text-amber-800/80">
+                              Este módulo requiere tu presencia física en las instalaciones de Alumco. 
+                              El instructor evaluará tus habilidades prácticas desarrolladas durante este curso.
+                            </p>
+
+                            <div className="rounded-xl bg-white/60 p-4 border border-amber-100 shadow-inner">
+                              <p className="text-xs font-bold text-amber-700 uppercase mb-2 flex items-center gap-2">
+                                <AlertTriangle className="w-3 h-3" /> Instrucciones del Instructor
+                              </p>
+                              <p className="text-sm italic text-amber-900">
+                                {modulo.contenido && typeof modulo.contenido === 'string' 
+                                  ? modulo.contenido 
+                                  : PRACTICA_PRESENCIAL_MESSAGE}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Estado / Acción */}
+                          <div className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow-sm border border-amber-100">
+                            {modulo.practicaEstado === 'aprobado' ? (
+                              <div className="text-center space-y-2">
+                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
+                                  <UserCheck className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-bold text-green-700 uppercase">Aprobado</p>
+                                <p className="text-[10px] text-gray-500 font-medium">¡Felicidades! Has completado esta fase.</p>
+                              </div>
+                            ) : modulo.practicaEstado === 'pendiente' ? (
+                              <div className="text-center space-y-3">
+                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 animate-pulse">
+                                  <Clock className="w-6 h-6" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-blue-700 uppercase">Solicitado</p>
+                                  <p className="text-[10px] text-gray-500 font-medium mt-1">Esperando respuesta del instructor...</p>
+                                </div>
+                                <div className="h-1 w-full bg-blue-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500 w-1/2 animate-[shimmer_2s_infinite]" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center space-y-4">
+                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                                  <Send className="w-6 h-6" />
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase">Acción Requerida</p>
+                                  <p className="text-xs font-medium text-amber-800">¿Estás listo?</p>
+                                </div>
+                                <Button 
+                                  size="sm" 
+                                  className="w-full bg-amber-600 hover:bg-amber-700 font-bold shadow-lg shadow-amber-200"
+                                  onClick={() => modulo.id && handleSolicitarPractica(modulo.id)}
+                                >
+                                  Solicitar Práctica
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Decoración del Ticket (círculos laterales) */}
+                      <div className="absolute top-1/2 -left-3 h-6 w-6 -translate-y-1/2 rounded-full bg-white border-r-2 border-dashed border-amber-200" />
+                      <div className="absolute top-1/2 -right-3 h-6 w-6 -translate-y-1/2 rounded-full bg-white border-l-2 border-dashed border-amber-200" />
                     </div>
                   ) : (
                     (() => {
@@ -576,7 +754,23 @@ export default function CursoDetalle() {
                   {/* Botón Marcar Listo para contenido manual */}
                   {(modulo.tipo === 'video' || modulo.tipo === 'lectura') && !isCompleted && (
                     <div className="mt-6 flex justify-end">
-                      <Button onClick={() => handleMarcarListo(modulo.id!)}>Marcar como listo</Button>
+                      <Button 
+                        onClick={() => handleMarcarListo(modulo.id!)}
+                        disabled={isMarkingReady === modulo.id}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {isMarkingReady === modulo.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Marcar como listo
+                          </>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </CardContent>

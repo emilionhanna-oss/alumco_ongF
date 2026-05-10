@@ -521,6 +521,56 @@ export const courseService = {
       };
     }
   },
+
+  /**
+   * Sube un archivo de material para un módulo
+   */
+  async uploadModuleMaterial(file: File): Promise<ApiResponse<{ url: string }>> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(buildApiUrl('/api/cursos/upload-material'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        return { success: true, data: { url: data.url } };
+      }
+      return { success: false, error: data.error || 'Error al subir archivo' };
+    } catch (error) {
+      console.error(error);
+      return { success: false, error: 'Error de conexión al subir archivo' };
+    }
+  },
+
+  /**
+   * Solicita evaluación de práctica presencial
+   */
+  async solicitarPractica(moduloId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await fetch(buildApiUrl(`/api/cursos/modulos/${moduloId}/solicitar-practica`), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        return { success: true };
+      }
+      return { success: false, error: 'No se pudo enviar la solicitud' };
+    } catch (error) {
+      console.error(error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  },
 };
 
 /**

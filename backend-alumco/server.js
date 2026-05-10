@@ -40,19 +40,6 @@ app.get('/', (req, res) => {
   res.send('¡Servidor de Alumco funcionando correctamente!');
 });
 
-app.get('/test-auth', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
-  const jwt = require('jsonwebtoken');
-  const SECRET_KEY = process.env.JWT_SECRET || 'dev_insecure_change_me';
-  try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    res.json({ ok: true, decoded });
-  } catch(e) {
-    res.json({ ok: false, error: e.message });
-  }
-});
-
 // Conectamos la ruta de auth
 app.use('/api/auth', authRoutes);
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import * as xlsx from 'xlsx';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Badge } from '../components/ui/badge';
@@ -34,7 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ChevronLeft, LogOut, PencilLine, Users } from 'lucide-react';
 import { userService } from '../services/apiService';
 import type { User } from '../types';
-import { BACKEND_URL } from '../config/api.config';
+import { BACKEND_URL, buildApiUrl } from '../config/api.config';
 import { formatRutForDisplay, normalizeRutForSearch, normalizeRutForStorage } from '../utils/rut';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
@@ -156,6 +157,60 @@ export default function AdminUsuarios() {
   const [editingFechaExpiracion, setEditingFechaExpiracion] = useState('');
   const [savingUser, setSavingUser] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  const downloadTemplate = () => {
+    const ws = xlsx.utils.json_to_sheet([
+      { 
+        'Nombre Completo': 'Juan Pérez', 
+        'Email': 'juan@ejemplo.com', 
+        'RUT': '12.345.678-9', 
+        'Genero': 'Masculino', 
+        'Cargo': 'Cuidados Directos' 
+      }
+    ]);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "PlantillaUsuarios");
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "plantilla_usuarios_alumco.xlsx";
+    a.click();
+    window.URL.revokeObjectURL(url);
+    setIsHelpOpen(false);
+  };
+
+  const triggerFileUpload = () => {
+    setIsHelpOpen(false);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = localStorage.getItem('token') || '';
+      fetch(buildApiUrl('/api/reportes/usuarios/importar'), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        toast.success(`Importación completada:\nInsertados: ${data.insertados}\nErrores: ${data.errores?.length || 0}`);
+        userService.getUsers().then(res => {
+          if (res.success && res.data) {
+            setState({ status: 'ready', users: res.data.map(normalizeUser) });
+          }
+        });
+      })
+      .catch(err => toast.error('Error al importar'));
+    };
+    input.click();
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -436,32 +491,9 @@ export default function AdminUsuarios() {
                   Exportar Excel
                 </Button>
 
-                <Button variant="outline" onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = '.xlsx, .xls';
-                  input.onchange = (e: any) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    const token = localStorage.getItem('token') || '';
-                    fetch(buildApiUrl('/api/reportes/usuarios/importar'), {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${token}` },
-                      body: formData
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                      alert(`Importación completada:\nInsertados: ${data.insertados}\nErrores: ${data.errores.length}`);
-                      window.location.reload();
-                    })
-                    .catch(err => alert('Error al importar'));
-                  };
-                  input.click();
-                }}>
-                  Importar Excel
-                </Button>
+                 <Button variant="outline" onClick={() => setIsHelpOpen(true)}>
+                   Importar Excel
+                 </Button>
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as UserStatus)}>
@@ -706,6 +738,43 @@ export default function AdminUsuarios() {
               {savingUser ? 'Guardando...' : 'Guardar cambios'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Ayuda Formato Usuarios */}
+      <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Asistente de Importación de Usuarios</DialogTitle>
+            <DialogDescription>
+              Para cargar nuevos usuarios masivamente, asegúrate de que tu Excel tenga las columnas correctas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border p-4 bg-slate-50">
+              <h4 className="text-sm font-semibold mb-2">Columnas Requeridas:</h4>
+              <ul className="text-xs text-gray-600 grid grid-cols-2 gap-x-2 gap-y-1 list-disc list-inside">
+                <li>Nombre Completo</li>
+                <li>Email</li>
+                <li>RUT</li>
+                <li>Genero</li>
+                <li>Cargo</li>
+              </ul>
+              <p className="mt-3 text-[10px] text-gray-500 italic">
+                * La contraseña inicial de cada usuario será su RUT (sin puntos ni guion).
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" className="flex flex-col h-auto py-4 gap-2" onClick={downloadTemplate}>
+                <PencilLine className="w-6 h-6 text-blue-600" />
+                <span className="text-xs font-bold">Descargar Plantilla</span>
+              </Button>
+              <Button className="flex flex-col h-auto py-4 gap-2" onClick={triggerFileUpload}>
+                <Users className="w-6 h-6 text-white" />
+                <span className="text-xs font-bold">Ya tengo mi archivo</span>
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

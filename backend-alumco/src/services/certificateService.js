@@ -94,75 +94,78 @@ async function generateCertificate(curso_id, usuario_id) {
 
       // Título
       doc.font('Helvetica-Bold')
-         .fontSize(36)
+         .fontSize(34)
          .fillColor('#1a2840')
-         .text('CERTIFICADO DE APROBACIÓN', 0, 150, { align: 'center' });
-
-      doc.font('Helvetica')
-         .fontSize(16)
-         .fillColor('#4b5563')
-         .text('Se otorga el presente a:', 0, 220, { align: 'center' });
-
-      // Nombre del alumno
-      doc.font('Helvetica-Bold')
-         .fontSize(30)
-         .fillColor('#2563eb')
-         .text(data.nombre_completo, 0, 260, { align: 'center' });
+         .text('CERTIFICADO DE APROBACIÓN', 0, 110, { align: 'center', width: 841.89 });
 
       doc.font('Helvetica')
          .fontSize(14)
          .fillColor('#4b5563')
-         .text(`RUT: ${data.rut}`, 0, 300, { align: 'center' });
+         .text('Se otorga el presente a:', 0, 165, { align: 'center', width: 841.89 });
+
+      // Nombre del alumno
+      doc.font('Helvetica-Bold')
+         .fontSize(32)
+         .fillColor('#2563eb')
+         .text(data.nombre_completo, 0, 195, { align: 'center', width: 841.89 });
+
+      doc.font('Helvetica')
+         .fontSize(12)
+         .fillColor('#4b5563')
+         .text(`RUT: ${data.rut}`, 0, 235, { align: 'center', width: 841.89 });
 
       // Descripción
       doc.font('Helvetica')
-         .fontSize(16)
+         .fontSize(14)
          .fillColor('#1f2937')
-         .text('Por haber completado satisfactoriamente el curso:', 0, 350, { align: 'center' });
+         .text('Por haber completado satisfactoriamente el curso:', 0, 280, { align: 'center', width: 841.89 });
 
       // Curso
       doc.font('Helvetica-Bold')
-         .fontSize(22)
+         .fontSize(24)
          .fillColor('#1a2840')
-         .text(data.curso_titulo, 0, 380, { align: 'center' });
+         .text(data.curso_titulo, 0, 310, { align: 'center', width: 841.89 });
 
       // Fecha
       const fechaFormat = data.completado_en ? new Date(data.completado_en).toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL');
       doc.font('Helvetica')
-         .fontSize(14)
+         .fontSize(12)
          .fillColor('#4b5563')
-         .text(`Fecha de emisión: ${fechaFormat}`, 0, 420, { align: 'center' });
+         .text(`Fecha de emisión: ${fechaFormat}`, 0, 360, { align: 'center', width: 841.89 });
 
-      // Firma del instructor
+      // --- Sección Inferior (Firma y QR) ---
+      const bottomY = 430;
+
+      // Firma del instructor (Izquierda)
       if (data.instructor_firma_img && data.instructor_firma_img.startsWith('data:image/')) {
         try {
           const base64Data = data.instructor_firma_img.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
           const imgBuffer = Buffer.from(base64Data, 'base64');
-          doc.image(imgBuffer, 150, 480, { width: 150, height: 50, fit: [150, 50] });
+          doc.image(imgBuffer, 150, bottomY, { width: 140, height: 60, fit: [140, 60] });
         } catch (e) {
           console.error('Error insertando firma en PDF:', e);
         }
       }
       doc.font('Helvetica-Bold')
-         .fontSize(12)
+         .fontSize(11)
          .fillColor('#1a2840')
-         .text(data.instructor_firma_texto || 'Instructor', 150, 535, { align: 'center', width: 150 });
-      doc.moveTo(150, 530).lineTo(300, 530).stroke();
+         .text(data.instructor_firma_texto || 'Instructor Responsable', 120, bottomY + 65, { align: 'center', width: 200 });
+      doc.moveTo(120, bottomY + 62).lineTo(320, bottomY + 62).strokeColor('#1a2840').lineWidth(1).stroke();
 
-      // Generar y estampar código QR
-      // Asumiendo que el frontend estará en la URL base (o se la pasamos en ENV)
-      const frontendUrl = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0] : 'http://localhost:5173';
+      // Generar y estampar código QR (Derecha)
+      const frontendUrl = process.env.FRONTEND_URL || (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0] : 'http://localhost:5173');
       const verificationUrl = `${frontendUrl}/verificar-certificado/${hash}`;
       
-      const qrDataUrl = await QRCode.toDataURL(verificationUrl, { margin: 1 });
+      const qrDataUrl = await QRCode.toDataURL(verificationUrl, { margin: 1, color: { dark: '#1a2840' } });
       const qrBase64 = qrDataUrl.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
       const qrBuffer = Buffer.from(qrBase64, 'base64');
       
-      doc.image(qrBuffer, 650, 460, { width: 80 });
+      doc.image(qrBuffer, 580, bottomY - 10, { width: 90 });
       doc.font('Helvetica')
          .fontSize(8)
          .fillColor('#6b7280')
-         .text(`ID: ${hash}`, 650, 545, { align: 'center', width: 80 });
+         .text(`ID Verificación: ${hash}`, 560, bottomY + 85, { align: 'center', width: 130 });
+      doc.text('Escanea para verificar autenticidad', 560, bottomY + 95, { align: 'center', width: 130 });
 
       doc.end();
     } catch (err) {

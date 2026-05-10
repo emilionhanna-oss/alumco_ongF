@@ -26,15 +26,17 @@ echo.
 echo Selecciona una accion:
 echo 1) Iniciar (construir e iniciar contenedores)
 echo 2) Reiniciar (reiniciar contenedores rapido)
-echo 3) Detener (detener y limpiar contenedores)
-echo 4) Salir
+echo 3) Detener (detener contenedores)
+echo 4) Limpiar TODO (detener y borrar base de datos)
+echo 5) Salir
 echo.
-set /p opcion="Ingresa el numero de la opcion (1-4): "
+set /p opcion="Ingresa el numero de la opcion (1-5): "
 
 if "%opcion%"=="1" goto iniciar
 if "%opcion%"=="2" goto reiniciar
 if "%opcion%"=="3" goto detener
-if "%opcion%"=="4" goto salir
+if "%opcion%"=="4" goto limpiar
+if "%opcion%"=="5" goto salir
 echo Opcion invalida. Intenta de nuevo.
 goto menu
 
@@ -64,11 +66,32 @@ goto menu
 
 :detener
 echo.
-echo Deteniendo y limpiando contenedores...
+echo Deteniendo contenedores...
 echo.
 docker compose down
 echo.
 echo Contenedores detenidos.
+echo.
+pause
+goto menu
+
+:limpiar
+echo.
+echo ======================================================
+echo   ADVERTENCIA: Se borrara la base de datos completa.
+echo   Se perderan todos los cursos y usuarios creados.
+echo ======================================================
+echo.
+set /p confirmar="¿Estas seguro? (S/N): "
+if /i "%confirmar%" neq "S" goto menu
+
+echo.
+echo Limpiando volumenes y contenedores...
+echo.
+docker compose down -v
+echo.
+echo Sistema limpiado. La proxima vez que inicies (Opcion 1),
+echo se creara la base de datos desde cero con el nuevo esquema.
 echo.
 pause
 goto menu

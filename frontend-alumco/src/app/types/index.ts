@@ -62,11 +62,13 @@ export interface CourseDetail extends Course {
 export type CursoModuloTipo = 'video' | 'lectura' | 'quiz' | 'practica_presencial';
 
 export interface CursoModulo {
+  id?: number;
   tituloModulo?: string;
   tipo?: CursoModuloTipo;
   contenido?: unknown;
   materialDescargable?: string | null;
   completado?: boolean;
+  practicaEstado?: 'pendiente' | 'aprobado' | 'rechazado' | null;
 }
 
 export interface CursoBackend {

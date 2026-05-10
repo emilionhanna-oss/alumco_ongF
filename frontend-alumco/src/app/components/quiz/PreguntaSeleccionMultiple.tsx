@@ -42,14 +42,16 @@ export const PreguntaSeleccionMultiple: React.FC<PreguntaSeleccionMultipleProps>
             let textColor = 'text-gray-700';
 
             if (mostrarResultado) {
-              if (isCorrectaOpcion) {
-                bgColor = 'bg-green-50';
-                borderColor = 'border-green-500';
-                textColor = 'text-green-900';
-              } else if (isSelected && !isCorrectaOpcion) {
-                bgColor = 'bg-red-50';
-                borderColor = 'border-red-500';
-                textColor = 'text-red-900';
+              if (isSelected) {
+                if (esCorrecta) {
+                  bgColor = 'bg-green-50';
+                  borderColor = 'border-green-500';
+                  textColor = 'text-green-900';
+                } else {
+                  bgColor = 'bg-red-50';
+                  borderColor = 'border-red-500';
+                  textColor = 'text-red-900';
+                }
               }
             }
 
@@ -64,11 +66,10 @@ export const PreguntaSeleccionMultiple: React.FC<PreguntaSeleccionMultipleProps>
                   {opcion.texto}
                 </Label>
 
-                {mostrarResultado && isCorrectaOpcion && (
-                  <span className="text-green-600 font-semibold">✓ Correcta</span>
-                )}
-                {mostrarResultado && isSelected && !isCorrectaOpcion && (
-                  <span className="text-red-600 font-semibold">✗ Incorrecta</span>
+                {mostrarResultado && isSelected && (
+                  <span className={esCorrecta ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+                    {esCorrecta ? "✓ Tu respuesta es correcta" : "✗ Tu respuesta es incorrecta"}
+                  </span>
                 )}
               </div>
             );

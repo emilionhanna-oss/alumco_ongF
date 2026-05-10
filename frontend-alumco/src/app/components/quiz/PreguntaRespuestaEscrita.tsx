@@ -39,20 +39,10 @@ export const PreguntaRespuestaEscrita: React.FC<PreguntaRespuestaEscritaProps> =
         />
       </div>
 
-      {mostrarResultado && detalleResultado?.respuestaModelo && (
+      {mostrarResultado && (
         <div className="mt-4 p-3 bg-blue-100 border border-blue-400 rounded">
-          <p className="font-semibold text-blue-900 text-sm mb-2">Respuesta modelo (para referencia):</p>
-          <p className="text-blue-800 text-sm">{detalleResultado.respuestaModelo}</p>
-          <p className="text-blue-700 text-xs mt-2">
-            💡 Nota: Esta es la respuesta esperada. Tu respuesta será revisada por el instructor.
-          </p>
-        </div>
-      )}
-
-      {mostrarResultado && !detalleResultado?.respuestaModelo && (
-        <div className="mt-4 p-3 bg-amber-100 border border-amber-400 rounded">
-          <p className="text-amber-800 text-sm">
-            ⏳ Tu respuesta fue enviada correctamente. Será revisada manualmente por el instructor.
+          <p className="text-blue-800 text-sm">
+            ✅ Tu respuesta fue enviada correctamente y será revisada por el instructor.
           </p>
         </div>
       )}

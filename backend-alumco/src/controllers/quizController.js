@@ -159,8 +159,17 @@ const obtenerQuizModulo = async (req, res) => {
     let intento_numero = 1;
     if (intentoResult.rows.length > 0) {
       const ultimo_intento = intentoResult.rows[0];
-      // Si el último intento está completado o reprobado, puede hacer otro
-      if (['completado', 'reprobado'].includes(ultimo_intento.estado)) {
+
+      // Si ya aprobó, no permitir nuevos intentos
+      if (ultimo_intento.estado === 'completado') {
+        return res.status(403).json({
+          error: 'Ya aprobado',
+          mensaje: 'Ya has aprobado este quiz. No es necesario repetirlo.',
+        });
+      }
+
+      // Si el último intento fue reprobado, permitir el segundo intento
+      if (ultimo_intento.estado === 'reprobado') {
         if (ultimo_intento.intento_numero < 2) {
           intento_numero = 2;
         } else {

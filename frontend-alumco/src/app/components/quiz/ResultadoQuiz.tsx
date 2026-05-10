@@ -61,48 +61,50 @@ export const ResultadoQuiz: React.FC<ResultadoQuizProps> = ({
         </div>
       </div>
 
-      {/* Detalles de preguntas */}
-      <div>
-        <h4 className="text-lg font-bold text-gray-900 mb-4">Detalles de tu evaluación:</h4>
-        <div className="space-y-4">
-          {detalles_preguntas.map((detalle, idx) => {
-            const num_pregunta = idx + 1;
+      {/* Detalles de preguntas - SOLO MOSTRAR SI REPROBÓ */}
+      {!aprobado && (
+        <div>
+          <h4 className="text-lg font-bold text-gray-900 mb-4">Revisión de respuestas:</h4>
+          <div className="space-y-4">
+            {detalles_preguntas.map((detalle, idx) => {
+              const num_pregunta = idx + 1;
 
-            if (detalle.tipo === 'seleccion_multiple') {
-              return (
-                <div key={idx} className="border-l-4 border-blue-500 pl-4">
-                  <h5 className="font-semibold text-gray-900 mb-2">
-                    Pregunta {num_pregunta} (Selección múltiple)
-                  </h5>
-                  <PreguntaSeleccionMultiple
-                    pregunta_id={detalle.pregunta_id}
-                    pregunta={detalle.pregunta}
-                    opciones={detalle.opciones || []}
-                    respuesta_usuario={detalle.respuesta_usuario}
-                    mostrarResultado={true}
-                    detalleResultado={detalle}
-                  />
-                </div>
-              );
-            } else {
-              return (
-                <div key={idx} className="border-l-4 border-purple-500 pl-4">
-                  <h5 className="font-semibold text-gray-900 mb-2">
-                    Pregunta {num_pregunta} (Respuesta escrita)
-                  </h5>
-                  <PreguntaRespuestaEscrita
-                    pregunta_id={detalle.pregunta_id}
-                    pregunta={detalle.pregunta}
-                    respuesta_usuario={detalle.respuesta_usuario}
-                    mostrarResultado={true}
-                    detalleResultado={detalle}
-                  />
-                </div>
-              );
-            }
-          })}
+              if (detalle.tipo === 'seleccion_multiple') {
+                return (
+                  <div key={idx} className="border-l-4 border-blue-500 pl-4">
+                    <h5 className="font-semibold text-gray-900 mb-2">
+                      Pregunta {num_pregunta} (Selección múltiple)
+                    </h5>
+                    <PreguntaSeleccionMultiple
+                      pregunta_id={detalle.pregunta_id}
+                      pregunta={detalle.pregunta}
+                      opciones={detalle.opciones || []}
+                      respuesta_usuario={detalle.respuesta_usuario}
+                      mostrarResultado={true}
+                      detalleResultado={detalle}
+                    />
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={idx} className="border-l-4 border-purple-500 pl-4">
+                    <h5 className="font-semibold text-gray-900 mb-2">
+                      Pregunta {num_pregunta} (Respuesta escrita)
+                    </h5>
+                    <PreguntaRespuestaEscrita
+                      pregunta_id={detalle.pregunta_id}
+                      pregunta={detalle.pregunta}
+                      respuesta_usuario={detalle.respuesta_usuario}
+                      mostrarResultado={true}
+                      detalleResultado={detalle}
+                    />
+                  </div>
+                );
+              }
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Botones de acción */}
       <div className="flex gap-3 pt-4 border-t">

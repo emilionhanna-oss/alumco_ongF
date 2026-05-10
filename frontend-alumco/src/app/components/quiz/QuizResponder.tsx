@@ -1,6 +1,6 @@
 // src/app/components/quiz/QuizResponder.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader, AlertCircle, Clock } from 'lucide-react';
+import { Loader, AlertCircle, Clock, CheckCircle2, ClipboardList } from 'lucide-react';
 import { Button } from '../ui/button';
 import { PreguntaSeleccionMultiple } from './PreguntaSeleccionMultiple';
 import { PreguntaRespuestaEscrita } from './PreguntaRespuestaEscrita';
@@ -26,6 +26,7 @@ export const QuizResponder: React.FC<QuizResponderProps> = ({ modulo_id, onVolve
   const [tiempoInicio, setTiempoInicio] = useState<number>(0);
   const [tiempoRestante, setTiempoRestante] = useState<number | null>(null);
   const [todasRespondidas, setTodasRespondidas] = useState(false);
+  const [haComenzado, setHaComenzado] = useState(false);
 
   // Iniciar timer cuando se carga el quiz
   useEffect(() => {
@@ -133,8 +134,56 @@ export const QuizResponder: React.FC<QuizResponderProps> = ({ modulo_id, onVolve
     );
   }
 
+  // PANTALLA DE INICIO (Antes de responder)
+  if (etapa === 'respondiendo' && !haComenzado) {
+    return (
+      <div className="p-8 text-center space-y-6 bg-gradient-to-br from-blue-50 to-white rounded-2xl border-2 border-blue-100 shadow-sm">
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-blue-600">
+          <ClipboardList className="w-10 h-10" />
+        </div>
+        
+        <div className="space-y-2">
+          <h3 className="text-2xl font-bold text-gray-900">{quiz.titulo}</h3>
+          <p className="text-gray-600 max-w-md mx-auto">
+            Esta actividad evaluará tus conocimientos sobre el módulo. 
+            Asegúrate de haber revisado todo el material antes de comenzar.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-4 text-sm font-medium py-4 border-y border-blue-100">
+          <div className="px-4 py-2 bg-white rounded-lg border shadow-sm flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-blue-500" />
+            <span>Intento {quiz.intento_numero} de 2</span>
+          </div>
+          {quiz.tiempo_limite_minutos && (
+            <div className="px-4 py-2 bg-white rounded-lg border shadow-sm flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-500" />
+              <span>{quiz.tiempo_limite_minutos} minutos</span>
+            </div>
+          )}
+          <div className="px-4 py-2 bg-white rounded-lg border shadow-sm flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <span>Mínimo {quiz.calificacion_minima || 60}%</span>
+          </div>
+        </div>
+
+        <div className="flex gap-4 pt-4">
+          <Button onClick={onVolver} variant="ghost" className="flex-1 text-gray-500">
+            Aún no estoy listo
+          </Button>
+          <Button 
+            onClick={() => setHaComenzado(true)} 
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 shadow-lg"
+          >
+            Iniciar Examen
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // RESPONDIENDO
-  if (etapa === 'respondiendo') {
+  if (etapa === 'respondiendo' && haComenzado) {
     return (
       <div className="space-y-6">
         {/* Header con timer */}

@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { ArrowLeft, Users, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Users, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { profesorService } from '../services/profesorService';
+import { toast } from 'sonner';
 
 interface Estudiante {
   id: string;
@@ -39,36 +40,49 @@ export default function ProfessorCourseDetail() {
   const [loadingPrac, setLoadingPrac] = useState(true);
   const [autorizandoId, setAutorizandoId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadEstudiantes = async (silent = false) => {
     if (!cursoId) return;
+    if (!silent) setLoadingEst(true);
+    const res = await profesorService.getEstudiantes(cursoId);
+    if (res.success && res.data) {
+      setEstudiantes(res.data);
+    }
+    setLoadingEst(false);
+  };
 
-    const loadEstudiantes = async () => {
-      const res = await profesorService.getEstudiantes(cursoId);
-      if (res.success && res.data) {
-        setEstudiantes(res.data);
-      }
-      setLoadingEst(false);
-    };
+  const loadPracticas = async (silent = false) => {
+    if (!cursoId) return;
+    if (!silent) setLoadingPrac(true);
+    const res = await profesorService.getPracticasPendientes(cursoId);
+    if (res.success && res.data) {
+      setPracticas(res.data);
+    }
+    setLoadingPrac(false);
+  };
 
-    const loadPracticas = async () => {
-      const res = await profesorService.getPracticasPendientes(cursoId);
-      if (res.success && res.data) {
-        setPracticas(res.data);
-      }
-      setLoadingPrac(false);
-    };
-
+  useEffect(() => {
     loadEstudiantes();
     loadPracticas();
   }, [cursoId]);
 
   const handleAutorizar = async (practicaId: string, estado: string) => {
     setAutorizandoId(practicaId);
-    const res = await profesorService.autorizarPractica(practicaId, estado);
-    if (res.success) {
-      setPracticas(practicas.filter((p) => p.id !== practicaId));
+    try {
+      const res = await profesorService.autorizarPractica(practicaId, estado);
+      if (res.success) {
+        toast.success(estado === 'aprobado' ? 'Práctica aprobada con éxito' : 'Práctica rechazada');
+        // Eliminar de la lista visual inmediata
+        setPracticas((prev) => prev.filter((p) => p.id !== practicaId));
+        // Refrescar lista de estudiantes para ver progreso actualizado
+        loadEstudiantes(true);
+      } else {
+        toast.error('No se pudo procesar la solicitud');
+      }
+    } catch (err) {
+      toast.error('Error de conexión');
+    } finally {
+      setAutorizandoId(null);
     }
-    setAutorizandoId(null);
   };
 
   return (
@@ -199,11 +213,15 @@ export default function ProfessorCourseDetail() {
                         <div className="flex gap-2">
                           <Button
                             onClick={() => handleAutorizar(practica.id, 'aprobado')}
-                            disabled={autorizandoId === practica.id}
+                            disabled={autorizandoId !== null}
                             size="sm"
-                            className="bg-green-600 hover:bg-green-700"
+                            className="bg-green-600 hover:bg-green-700 font-bold"
                           >
-                            <CheckCircle className="w-4 h-4 mr-1" />
+                            {autorizandoId === practica.id ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                            )}
                             Aprobar
                           </Button>
                           <Button
