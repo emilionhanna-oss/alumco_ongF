@@ -13,24 +13,37 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const path = location.pathname;
     const isPanel = path === '/panel' || path.startsWith('/panel/');
     const isAdmin = path === '/admin' || path.startsWith('/admin/');
+    const isProfesor = path === '/profesor' || path.startsWith('/profesor/');
     const isPerfil = path === '/perfil' || path.startsWith('/perfil/');
 
     const roles = (user as any)?.rol;
     const isAdminUser = Array.isArray(roles) && roles.includes('admin');
+    const isProfesorUser = Array.isArray(roles) && roles.includes('profesor');
+    const allowProfesorInAdmin =
+      isProfesorUser &&
+      (path.startsWith('/admin/gestion-capacitaciones') ||
+        path.startsWith('/admin/editar-curso'));
 
-    if (!isAuthenticated && (isPanel || isAdmin || isPerfil)) {
+    // Si NO autenticado y accedes a ruta protegida → login
+    if (!isAuthenticated && (isPanel || isAdmin || isProfesor || isPerfil)) {
       navigate('/', { replace: true });
       return;
     }
 
-    // Si un admin cae en /panel (por refresh/hot-reload), lo enviamos a /admin
+    // Si admin cae en /panel → /admin
     if (isAuthenticated && isPanel && isAdminUser) {
       navigate('/admin', { replace: true });
       return;
     }
 
-    // Si NO es admin, no puede ver /admin
-    if (isAuthenticated && isAdmin && !isAdminUser) {
+    // Si NO admin y cae en /admin → /panel
+    if (isAuthenticated && isAdmin && !isAdminUser && !allowProfesorInAdmin) {
+      navigate('/panel', { replace: true });
+      return;
+    }
+
+    // Si NO profesor y cae en /profesor → /panel
+    if (isAuthenticated && isProfesor && !isProfesorUser && !isAdminUser) {
       navigate('/panel', { replace: true });
     }
   }, [isAuthenticated, isLoading, location.pathname, navigate, user]);

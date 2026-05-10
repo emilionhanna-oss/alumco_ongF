@@ -12,97 +12,24 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
 import { GraduationCap, LogOut, Users, ChevronLeft } from 'lucide-react';
 import { courseService, userService } from '../services/apiService';
-import type { Course, CourseDetail, CursoModulo, User } from '../types';
+import type { Course, User } from '../types';
 import { BACKEND_URL } from '../config/api.config';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 
-const PRACTICA_PRESENCIAL_MESSAGE =
-  'Se le ha notificado a tu instructor que has finalizado la parte teórica. Por favor, espera a ser contactado para coordinar tu evaluación práctica presencial';
-
-type ModuloTipo = 'video' | 'lectura' | 'quiz' | 'practica_presencial';
-
-type LecturaContenido = {
-  archivoNombre?: string;
-  instrucciones?: string;
-};
-
-type QuizTipoPregunta = 'seleccion_multiple' | 'respuesta_escrita';
-
-type QuizOpcion = {
-  texto: string;
-  correcta: boolean;
-};
-
-type QuizPregunta = {
-  tipo: QuizTipoPregunta;
-  pregunta: string;
-  opciones?: QuizOpcion[];
-  respuestaModelo?: string;
-};
-
-type ModuloContenido = string | LecturaContenido | QuizPregunta[];
-
-type EditModulo = {
-  tituloModulo: string;
-  tipo: ModuloTipo;
-  contenido: ModuloContenido;
-};
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-  );
-}
-
-function coerceContenidoForTipo(nextTipo: ModuloTipo, prev: ModuloContenido): ModuloContenido {
-  if (nextTipo === 'practica_presencial') return PRACTICA_PRESENCIAL_MESSAGE;
-
-  if (nextTipo === 'quiz') {
-    if (Array.isArray(prev)) return prev;
-    // si venía de string/obj, iniciamos quiz vacío
-    return [];
-  }
-
-  if (nextTipo === 'lectura') {
-    if (isPlainObject(prev)) {
-      return {
-        archivoNombre: typeof prev.archivoNombre === 'string' ? prev.archivoNombre : undefined,
-        instrucciones: typeof prev.instrucciones === 'string' ? prev.instrucciones : undefined,
-      } satisfies LecturaContenido;
-    }
-    if (typeof prev === 'string') return { instrucciones: prev };
-    if (Array.isArray(prev)) return { instrucciones: '' };
-    return { instrucciones: '' };
-  }
-
-  // video
-  if (typeof prev === 'string') return prev;
-  if (isPlainObject(prev) && typeof prev.instrucciones === 'string') return prev.instrucciones;
-  return '';
-}
-
 export default function AdminGestionCapacitaciones() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [logoOk, setLogoOk] = useState(true);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
+
+  // Detectar si es profesor
+  const isProfesor = user?.rol?.includes('profesor') && !user?.rol?.includes('admin');
 
   const [users, setUsers] = useState<User[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
@@ -111,20 +38,6 @@ export default function AdminGestionCapacitaciones() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isLoadingCourseDetail, setIsLoadingCourseDetail] = useState(false);
-  const [editCourseId, setEditCourseId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editImage, setEditImage] = useState('');
-  const [editModules, setEditModules] = useState<EditModulo[]>([]);
-  const [newModuleTitle, setNewModuleTitle] = useState('');
-  const [newModuleType, setNewModuleType] = useState<ModuloTipo>('lectura');
-  const [newModuleContent, setNewModuleContent] = useState('');
-  const [newModuleFileName, setNewModuleFileName] = useState('');
-  const [newModuleQuiz, setNewModuleQuiz] = useState<QuizPregunta[]>([]);
-  const [isSavingCourse, setIsSavingCourse] = useState(false);
 
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [createCourseError, setCreateCourseError] = useState<string | null>(null);
@@ -142,14 +55,21 @@ export default function AdminGestionCapacitaciones() {
       setIsLoadingCourses(true);
       try {
         const response = await courseService.getCourses({ all: true });
-        setCourses(response.success && response.data ? response.data : []);
+        let allCourses = response.success && response.data ? response.data : [];
+        
+        // Si es profesor, filtrar solo sus cursos (donde instructor_id == user.id)
+        if (isProfesor && user?.id) {
+          allCourses = allCourses.filter(c => String(c.instructorId) === String(user.id));
+        }
+        
+        setCourses(allCourses);
       } finally {
         setIsLoadingCourses(false);
       }
     };
 
     loadCourses();
-  }, []);
+  }, [isProfesor, user?.id]);
 
   const ensureUsersLoaded = async () => {
     if (users.length > 0) return;
@@ -168,28 +88,13 @@ export default function AdminGestionCapacitaciones() {
     navigate('/');
   };
 
-  const handleCreateCourse = async () => {
+  const handleCreateCourse = () => {
     if (isCreatingCourse) return;
 
     setIsCreatingCourse(true);
     setCreateCourseError(null);
 
-    try {
-      const response = await courseService.createCourse({
-        titulo: 'Nueva capacitación',
-        descripcion: '',
-        imagen: '',
-      });
-
-      if (response.success && response.data?.id) {
-        navigate(`/admin/editar-curso/${response.data.id}`);
-        return;
-      }
-
-      setCreateCourseError(response.error || 'No se pudo crear el curso.');
-    } finally {
-      setIsCreatingCourse(false);
-    }
+    navigate('/admin/editar-curso/nuevo');
   };
 
   const openAssignDialog = async (course: Course) => {
@@ -204,126 +109,6 @@ export default function AdminGestionCapacitaciones() {
     setIsDialogOpen(false);
     setSelectedCourse(null);
     setSelectedUserIds([]);
-  };
-
-  const openEditDialog = async (course: Course) => {
-    if (!course?.id) return;
-
-    setIsEditDialogOpen(true);
-    setIsLoadingCourseDetail(true);
-
-    try {
-      const response = await courseService.getCourseDetail(String(course.id));
-      if (!response.success || !response.data) return;
-
-      const detail = response.data as CourseDetail;
-      const modulos = (detail.modulos || []) as CursoModulo[];
-
-      setEditCourseId(String(course.id));
-      setEditTitle(detail.title || course.title || '');
-      setEditDescription(detail.description || course.description || '');
-      setEditImage(detail.image || course.image || '');
-      setEditModules(
-        modulos.map((m) => {
-          const tipo = (m.tipo || 'lectura') as ModuloTipo;
-
-          if (tipo === 'practica_presencial') {
-            return {
-              tituloModulo: m.tituloModulo || 'Módulo sin título',
-              tipo,
-              contenido: PRACTICA_PRESENCIAL_MESSAGE,
-            };
-          }
-
-          if (tipo === 'lectura') {
-            const raw = (m as any).contenido;
-            if (typeof raw === 'string') {
-              return {
-                tituloModulo: m.tituloModulo || 'Módulo sin título',
-                tipo,
-                contenido: { instrucciones: raw } satisfies LecturaContenido,
-              };
-            }
-            if (isPlainObject(raw)) {
-              return {
-                tituloModulo: m.tituloModulo || 'Módulo sin título',
-                tipo,
-                contenido: {
-                  archivoNombre: typeof raw.archivoNombre === 'string' ? raw.archivoNombre : undefined,
-                  instrucciones: typeof raw.instrucciones === 'string' ? raw.instrucciones : undefined,
-                } satisfies LecturaContenido,
-              };
-            }
-            return {
-              tituloModulo: m.tituloModulo || 'Módulo sin título',
-              tipo,
-              contenido: { instrucciones: '' } satisfies LecturaContenido,
-            };
-          }
-
-          if (tipo === 'quiz') {
-            const raw = (m as any).contenido;
-            if (Array.isArray(raw)) {
-              return {
-                tituloModulo: m.tituloModulo || 'Módulo sin título',
-                tipo,
-                contenido: raw as QuizPregunta[],
-              };
-            }
-            if (typeof raw === 'string') {
-              try {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                  return {
-                    tituloModulo: m.tituloModulo || 'Módulo sin título',
-                    tipo,
-                    contenido: parsed as QuizPregunta[],
-                  };
-                }
-              } catch {
-                // ignore
-              }
-            }
-            return {
-              tituloModulo: m.tituloModulo || 'Módulo sin título',
-              tipo,
-              contenido: [] as QuizPregunta[],
-            };
-          }
-
-          // video
-          return {
-            tituloModulo: m.tituloModulo || 'Módulo sin título',
-            tipo,
-            contenido: typeof (m as any).contenido === 'string' ? (m as any).contenido : '',
-          };
-        })
-      );
-
-      setNewModuleTitle('');
-      setNewModuleType('lectura');
-      setNewModuleContent('');
-      setNewModuleFileName('');
-      setNewModuleQuiz([]);
-    } finally {
-      setIsLoadingCourseDetail(false);
-    }
-  };
-
-  const closeEditDialog = () => {
-    if (isSavingCourse) return;
-
-    setIsEditDialogOpen(false);
-    setEditCourseId(null);
-    setEditTitle('');
-    setEditDescription('');
-    setEditImage('');
-    setEditModules([]);
-    setNewModuleTitle('');
-    setNewModuleType('lectura');
-    setNewModuleContent('');
-    setNewModuleFileName('');
-    setNewModuleQuiz([]);
   };
 
   const toggleUser = (userId: string) => {
@@ -347,84 +132,6 @@ export default function AdminGestionCapacitaciones() {
       }
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const updateModule = (index: number, patch: Partial<EditModulo>) => {
-    setEditModules((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
-  };
-
-  const removeModule = (index: number) => {
-    setEditModules((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const moveModule = (from: number, to: number) => {
-    setEditModules((prev) => {
-      if (to < 0 || to >= prev.length) return prev;
-      const copy = [...prev];
-      const [item] = copy.splice(from, 1);
-      copy.splice(to, 0, item);
-      return copy;
-    });
-  };
-
-  const moveModuleUp = (index: number) => moveModule(index, index - 1);
-  const moveModuleDown = (index: number) => moveModule(index, index + 1);
-
-  const addModule = () => {
-    const tituloModulo = newModuleTitle.trim();
-    if (!tituloModulo) return;
-
-    const tipo = newModuleType;
-
-    const contenido: ModuloContenido = (() => {
-      if (tipo === 'practica_presencial') return PRACTICA_PRESENCIAL_MESSAGE;
-
-      if (tipo === 'video') return (newModuleContent || '').trim();
-
-      if (tipo === 'lectura') {
-        const instrucciones = (newModuleContent || '').trim();
-        const archivoNombre = (newModuleFileName || '').trim();
-        return {
-          instrucciones: instrucciones || undefined,
-          archivoNombre: archivoNombre || undefined,
-        } satisfies LecturaContenido;
-      }
-
-      // quiz
-      return newModuleQuiz;
-    })();
-
-    setEditModules((prev) => [...prev, { tituloModulo, tipo, contenido }]);
-    setNewModuleTitle('');
-    setNewModuleType('lectura');
-    setNewModuleContent('');
-    setNewModuleFileName('');
-    setNewModuleQuiz([]);
-  };
-
-  const handleSaveCourse = async () => {
-    if (!editCourseId) return;
-
-    setIsSavingCourse(true);
-    try {
-      const response = await courseService.updateCourse(editCourseId, {
-        titulo: editTitle,
-        descripcion: editDescription,
-        imagen: editImage,
-        modulos: editModules.map((m) => ({
-          tituloModulo: m.tituloModulo,
-          tipo: m.tipo,
-          contenido: m.tipo === 'practica_presencial' ? PRACTICA_PRESENCIAL_MESSAGE : m.contenido,
-        })),
-      });
-
-      if (response.success && response.data) {
-        setCourses((prev) => prev.map((c) => (c.id === editCourseId ? response.data! : c)));
-        closeEditDialog();
-      }
-    } finally {
-      setIsSavingCourse(false);
     }
   };
 
@@ -461,13 +168,13 @@ export default function AdminGestionCapacitaciones() {
                 </div>
               )}
               <div className="text-sm text-gray-600 leading-tight">
-                Admin · Gestión de Capacitaciones
+                {isProfesor ? 'Profesor' : 'Admin'} · Gestión de Capacitaciones
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => navigate('/admin')}
+                onClick={() => navigate(isProfesor ? '/profesor' : '/admin')}
                 variant="outline"
                 className="flex items-center gap-2"
               >
@@ -487,20 +194,28 @@ export default function AdminGestionCapacitaciones() {
         <div className="mb-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-purple-600" />
+              <div className={`p-3 ${isProfesor ? 'bg-green-100' : 'bg-purple-100'} rounded-lg`}>
+                <GraduationCap className={`w-6 h-6 ${isProfesor ? 'text-green-600' : 'text-purple-600'}`} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-[#1a2840]">Gestión de Capacitaciones</h2>
+                <h2 className="text-2xl font-bold text-[#1a2840]">
+                  {isProfesor ? 'Mis Capacitaciones' : 'Gestión de Capacitaciones'}
+                </h2>
                 <p className="text-sm text-gray-600">
-                  Asigna usuarios a cursos (se guarda en el backend)
+                  {isProfesor 
+                    ? 'Crea, edita y gestiona tus cursos' 
+                    : 'Asigna usuarios a cursos'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button onClick={handleCreateCourse} disabled={isCreatingCourse}>
-                {isCreatingCourse ? 'Creando…' : 'Crear Nueva Capacitación'}
+              <Button 
+                onClick={handleCreateCourse} 
+                disabled={isCreatingCourse}
+                className={isProfesor ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
+                {isCreatingCourse ? 'Creando\u2026' : 'Crear Nueva Capacitación'}
               </Button>
             </div>
           </div>
@@ -537,7 +252,7 @@ export default function AdminGestionCapacitaciones() {
                 className="hover:shadow-lg transition-shadow overflow-hidden flex flex-col min-h-[360px]"
               >
                 <div
-                  className="h-40 bg-gradient-to-br from-purple-400 to-purple-600"
+                  className={`h-40 bg-gradient-to-br ${isProfesor ? 'from-green-400 to-green-600' : 'from-purple-400 to-purple-600'}`}
                   style={
                     course.image
                       ? {
@@ -578,24 +293,26 @@ export default function AdminGestionCapacitaciones() {
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className={`mt-3 grid gap-2 ${isProfesor ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    {!isProfesor && (
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={() => openAssignDialog(course)}
+                      >
+                        Asignar usuarios
+                      </Button>
+                    )}
                     <Button
                       size="sm"
-                      className="w-full"
-                      onClick={() => openAssignDialog(course)}
-                    >
-                      Asignar usuarios
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
+                      variant={isProfesor ? 'default' : 'outline'}
+                      className={`w-full ${isProfesor ? 'bg-green-600 hover:bg-green-700' : ''}`}
                       onClick={() => {
                         if (!course?.id) return;
                         navigate(`/admin/editar-curso/${course.id}`);
                       }}
                     >
-                      Editar Contenido
+                      {isProfesor ? 'Editar Curso' : 'Editar Contenido'}
                     </Button>
                   </div>
                 </CardContent>
@@ -620,7 +337,7 @@ export default function AdminGestionCapacitaciones() {
             </DialogHeader>
 
             {isLoadingUsers ? (
-              <div className="text-sm text-gray-600">Cargando usuarios…</div>
+              <div className="text-sm text-gray-600">Cargando usuarios\u2026</div>
             ) : users.length === 0 ? (
               <div className="text-sm text-gray-600">No hay usuarios disponibles.</div>
             ) : (
@@ -658,757 +375,9 @@ export default function AdminGestionCapacitaciones() {
                 Cancelar
               </Button>
               <Button onClick={handleSaveAssignments} disabled={isSaving || !selectedCourse?.id}>
-                {isSaving ? 'Guardando…' : 'Guardar asignación'}
+                {isSaving ? 'Guardando\u2026' : 'Guardar asignación'}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
-          open={isEditDialogOpen}
-          onOpenChange={(open) => (open ? setIsEditDialogOpen(true) : closeEditDialog())}
-        >
-          <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Editar curso</DialogTitle>
-              <DialogDescription>
-                Cambia título, descripción, imagen y módulos. Al guardar, se persiste en el backend.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex-1 overflow-y-auto scroll-smooth pr-1">
-              {isLoadingCourseDetail ? (
-                <div className="text-sm text-gray-600">Cargando curso…</div>
-              ) : !editCourseId ? (
-                <div className="text-sm text-gray-600">Selecciona un curso para editar.</div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid gap-3">
-                    <div>
-                      <div className="text-xs font-medium text-gray-700 mb-1">Título</div>
-                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                    </div>
-
-                    <div>
-                      <div className="text-xs font-medium text-gray-700 mb-1">Descripción</div>
-                      <Textarea
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        className="min-h-[90px]"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="text-xs font-medium text-gray-700 mb-1">Imagen (URL o ruta)</div>
-                      <Input value={editImage} onChange={(e) => setEditImage(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">Módulos</div>
-                        <div className="text-xs text-gray-600">Edita, agrega o elimina módulos</div>
-                      </div>
-                    </div>
-
-                    {editModules.length === 0 ? (
-                      <div className="text-sm text-gray-600 rounded-md border p-3">Este curso aún no tiene módulos.</div>
-                    ) : (
-                      <div className="max-h-[320px] overflow-auto space-y-3 pr-2">
-                        {editModules.map((m, index) => (
-                          <div key={`${m.tituloModulo}-${index}`} className="rounded-md border p-3 space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex-1">
-                                <div className="text-xs font-medium text-gray-700 mb-1">Título del módulo</div>
-                                <Input
-                                  value={m.tituloModulo}
-                                  onChange={(e) => updateModule(index, { tituloModulo: e.target.value })}
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => moveModuleUp(index)}
-                                  disabled={isSavingCourse || index === 0}
-                                >
-                                  Subir
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => moveModuleDown(index)}
-                                  disabled={isSavingCourse || index === editModules.length - 1}
-                                >
-                                  Bajar
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => removeModule(index)}
-                                  disabled={isSavingCourse}
-                                >
-                                  Eliminar
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="grid sm:grid-cols-2 gap-3">
-                              <div>
-                                <div className="text-xs font-medium text-gray-700 mb-1">Tipo</div>
-                                <Select
-                                  value={m.tipo}
-                                  onValueChange={(v) => {
-                                    const nextTipo = v as ModuloTipo;
-                                    updateModule(index, {
-                                      tipo: nextTipo,
-                                      contenido: coerceContenidoForTipo(nextTipo, m.contenido),
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Selecciona tipo" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="video">Video (Link)</SelectItem>
-                                    <SelectItem value="lectura">Documento (Lectura)</SelectItem>
-                                    <SelectItem value="quiz">Quiz</SelectItem>
-                                    <SelectItem value="practica_presencial">Práctica Presencial</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-xs font-medium text-gray-700 mb-1">Contenido</div>
-
-                              {m.tipo === 'video' ? (
-                                <Input
-                                  value={typeof m.contenido === 'string' ? m.contenido : ''}
-                                  onChange={(e) => updateModule(index, { contenido: e.target.value })}
-                                  placeholder="Pega aquí el link/embed del video"
-                                  disabled={isSavingCourse}
-                                />
-                              ) : m.tipo === 'practica_presencial' ? (
-                                <Textarea value={PRACTICA_PRESENCIAL_MESSAGE} disabled className="min-h-[90px]" />
-                              ) : m.tipo === 'lectura' ? (
-                                <div className="space-y-2">
-                                  <div className="text-xs text-gray-600">
-                                    El archivo es simulado: solo se guarda el nombre (no se sube el documento).
-                                  </div>
-
-                                  <Input
-                                    type="file"
-                                    disabled={isSavingCourse}
-                                    onChange={(e) => {
-                                      const file = (e.target as HTMLInputElement).files?.[0];
-                                      const current: LecturaContenido = isPlainObject(m.contenido)
-                                        ? (m.contenido as LecturaContenido)
-                                        : typeof m.contenido === 'string'
-                                          ? { instrucciones: m.contenido }
-                                          : { instrucciones: '' };
-
-                                      updateModule(index, {
-                                        contenido: {
-                                          ...current,
-                                          archivoNombre: file?.name || undefined,
-                                        } satisfies LecturaContenido,
-                                      });
-                                    }}
-                                  />
-
-                                  {(() => {
-                                    const current: LecturaContenido = isPlainObject(m.contenido)
-                                      ? (m.contenido as LecturaContenido)
-                                      : typeof m.contenido === 'string'
-                                        ? { instrucciones: m.contenido }
-                                        : { instrucciones: '' };
-
-                                    return current.archivoNombre ? (
-                                      <div className="text-xs text-gray-700">
-                                        Archivo seleccionado: <span className="font-medium">{current.archivoNombre}</span>
-                                      </div>
-                                    ) : null;
-                                  })()}
-
-                                  <Textarea
-                                    value={(() => {
-                                      const current: LecturaContenido = isPlainObject(m.contenido)
-                                        ? (m.contenido as LecturaContenido)
-                                        : typeof m.contenido === 'string'
-                                          ? { instrucciones: m.contenido }
-                                          : { instrucciones: '' };
-                                      return current.instrucciones || '';
-                                    })()}
-                                    onChange={(e) => {
-                                      const current: LecturaContenido = isPlainObject(m.contenido)
-                                        ? (m.contenido as LecturaContenido)
-                                        : typeof m.contenido === 'string'
-                                          ? { instrucciones: m.contenido }
-                                          : { instrucciones: '' };
-
-                                      updateModule(index, {
-                                        contenido: {
-                                          ...current,
-                                          instrucciones: e.target.value,
-                                        } satisfies LecturaContenido,
-                                      });
-                                    }}
-                                    className="min-h-[90px]"
-                                    placeholder="Instrucciones de lectura (qué debe revisar, puntos clave, etc.)"
-                                    disabled={isSavingCourse}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="space-y-3">
-                                  {(() => {
-                                    const questions: QuizPregunta[] = Array.isArray(m.contenido)
-                                      ? (m.contenido as QuizPregunta[])
-                                      : [];
-
-                                    return (
-                                      <div className="space-y-3">
-                                        {questions.length === 0 ? (
-                                          <div className="text-sm text-gray-600 rounded-md border p-3">
-                                            Aún no hay preguntas.
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-3">
-                                            {questions.map((q, qIndex) => (
-                                              <div key={qIndex} className="rounded-md border p-3 space-y-3 bg-white">
-                                                <div className="flex items-center justify-between gap-2">
-                                                  <div className="text-sm font-semibold text-gray-900">
-                                                    Pregunta {qIndex + 1}
-                                                  </div>
-                                                  <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                      const next = questions.filter((_, i) => i !== qIndex);
-                                                      updateModule(index, { contenido: next });
-                                                    }}
-                                                    disabled={isSavingCourse}
-                                                  >
-                                                    Quitar
-                                                  </Button>
-                                                </div>
-
-                                                <div className="grid sm:grid-cols-2 gap-3">
-                                                  <div>
-                                                    <div className="text-xs font-medium text-gray-700 mb-1">Tipo</div>
-                                                    <Select
-                                                      value={q.tipo}
-                                                      onValueChange={(v) => {
-                                                        const nextTipo = v as QuizTipoPregunta;
-                                                        const next = questions.map((qq, i) => {
-                                                          if (i !== qIndex) return qq;
-                                                          const base: QuizPregunta = {
-                                                            ...qq,
-                                                            tipo: nextTipo,
-                                                          };
-
-                                                          if (nextTipo === 'seleccion_multiple') {
-                                                            return {
-                                                              ...base,
-                                                              opciones:
-                                                                Array.isArray(base.opciones) && base.opciones.length > 0
-                                                                  ? base.opciones
-                                                                  : [
-                                                                      { texto: 'Opción 1', correcta: true },
-                                                                      { texto: 'Opción 2', correcta: false },
-                                                                    ],
-                                                            };
-                                                          }
-
-                                                          return {
-                                                            ...base,
-                                                            opciones: undefined,
-                                                          };
-                                                        });
-                                                        updateModule(index, { contenido: next });
-                                                      }}
-                                                    >
-                                                      <SelectTrigger>
-                                                        <SelectValue placeholder="Selecciona" />
-                                                      </SelectTrigger>
-                                                      <SelectContent>
-                                                        <SelectItem value="seleccion_multiple">
-                                                          Selección múltiple
-                                                        </SelectItem>
-                                                        <SelectItem value="respuesta_escrita">
-                                                          Respuesta escrita
-                                                        </SelectItem>
-                                                      </SelectContent>
-                                                    </Select>
-                                                  </div>
-                                                </div>
-
-                                                <div>
-                                                  <div className="text-xs font-medium text-gray-700 mb-1">Enunciado</div>
-                                                  <Textarea
-                                                    value={q.pregunta || ''}
-                                                    onChange={(e) => {
-                                                      const next = questions.map((qq, i) =>
-                                                        i === qIndex ? { ...qq, pregunta: e.target.value } : qq
-                                                      );
-                                                      updateModule(index, { contenido: next });
-                                                    }}
-                                                    className="min-h-[70px]"
-                                                    disabled={isSavingCourse}
-                                                  />
-                                                </div>
-
-                                                {q.tipo === 'seleccion_multiple' ? (
-                                                  <div className="space-y-2">
-                                                    <div className="text-xs font-medium text-gray-700">Opciones</div>
-                                                    {(q.opciones || []).map((opt, optIndex) => (
-                                                      <div key={optIndex} className="flex items-center gap-2">
-                                                        <Checkbox
-                                                          checked={!!opt.correcta}
-                                                          onCheckedChange={() => {
-                                                            const next = questions.map((qq, i) => {
-                                                              if (i !== qIndex) return qq;
-                                                              const opciones = (qq.opciones || []).map((oo, oi) => ({
-                                                                ...oo,
-                                                                correcta: oi === optIndex,
-                                                              }));
-                                                              return { ...qq, opciones };
-                                                            });
-                                                            updateModule(index, { contenido: next });
-                                                          }}
-                                                          disabled={isSavingCourse}
-                                                        />
-                                                        <Input
-                                                          value={opt.texto || ''}
-                                                          onChange={(e) => {
-                                                            const next = questions.map((qq, i) => {
-                                                              if (i !== qIndex) return qq;
-                                                              const opciones = (qq.opciones || []).map((oo, oi) =>
-                                                                oi === optIndex ? { ...oo, texto: e.target.value } : oo
-                                                              );
-                                                              return { ...qq, opciones };
-                                                            });
-                                                            updateModule(index, { contenido: next });
-                                                          }}
-                                                          placeholder={`Opción ${optIndex + 1}`}
-                                                          disabled={isSavingCourse}
-                                                        />
-                                                        <Button
-                                                          variant="outline"
-                                                          size="sm"
-                                                          onClick={() => {
-                                                            const next = questions.map((qq, i) => {
-                                                              if (i !== qIndex) return qq;
-                                                              const before = qq.opciones || [];
-                                                              const opciones = before.filter((_, oi) => oi !== optIndex);
-                                                              if (opciones.length > 0 && !opciones.some((o) => o.correcta)) {
-                                                                opciones[0] = { ...opciones[0], correcta: true };
-                                                              }
-                                                              return { ...qq, opciones };
-                                                            });
-                                                            updateModule(index, { contenido: next });
-                                                          }}
-                                                          disabled={isSavingCourse}
-                                                        >
-                                                          −
-                                                        </Button>
-                                                      </div>
-                                                    ))}
-
-                                                    <div>
-                                                      <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                          const next = questions.map((qq, i) => {
-                                                            if (i !== qIndex) return qq;
-                                                            const opciones = [...(qq.opciones || [])];
-                                                            opciones.push({
-                                                              texto: `Opción ${opciones.length + 1}`,
-                                                              correcta: opciones.length === 0,
-                                                            });
-                                                            return { ...qq, opciones };
-                                                          });
-                                                          updateModule(index, { contenido: next });
-                                                        }}
-                                                        disabled={isSavingCourse}
-                                                      >
-                                                        Añadir opción
-                                                      </Button>
-                                                    </div>
-
-                                                    <div className="text-xs text-gray-600">
-                                                      Marca con el check la opción correcta (solo una).
-                                                    </div>
-                                                  </div>
-                                                ) : (
-                                                  <div>
-                                                    <div className="text-xs font-medium text-gray-700 mb-1">
-                                                      Respuesta modelo (opcional)
-                                                    </div>
-                                                    <Textarea
-                                                      value={q.respuestaModelo || ''}
-                                                      onChange={(e) => {
-                                                        const next = questions.map((qq, i) =>
-                                                          i === qIndex
-                                                            ? { ...qq, respuestaModelo: e.target.value }
-                                                            : qq
-                                                        );
-                                                        updateModule(index, { contenido: next });
-                                                      }}
-                                                      className="min-h-[70px]"
-                                                      disabled={isSavingCourse}
-                                                    />
-                                                  </div>
-                                                )}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        <div>
-                                          <Button
-                                            type="button"
-                                            onClick={() => {
-                                              const next = [...questions];
-                                              next.push({
-                                                tipo: 'seleccion_multiple',
-                                                pregunta: '',
-                                                opciones: [
-                                                  { texto: 'Opción 1', correcta: true },
-                                                  { texto: 'Opción 2', correcta: false },
-                                                ],
-                                              });
-                                              updateModule(index, { contenido: next });
-                                            }}
-                                            disabled={isSavingCourse}
-                                          >
-                                            Añadir pregunta
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-4 rounded-md border p-3 space-y-3">
-                      <div className="text-sm font-semibold text-gray-900">Añadir módulo</div>
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        <div>
-                          <div className="text-xs font-medium text-gray-700 mb-1">Título</div>
-                          <Input value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} />
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-gray-700 mb-1">Tipo</div>
-                          <Select
-                            value={newModuleType}
-                            onValueChange={(v) => {
-                              const nextTipo = v as ModuloTipo;
-                              setNewModuleType(nextTipo);
-                              setNewModuleContent('');
-                              setNewModuleFileName('');
-                              setNewModuleQuiz([]);
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona tipo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="video">Video (Link)</SelectItem>
-                              <SelectItem value="lectura">Documento (Lectura)</SelectItem>
-                              <SelectItem value="quiz">Quiz</SelectItem>
-                              <SelectItem value="practica_presencial">Práctica Presencial</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-medium text-gray-700 mb-1">Contenido</div>
-                        {newModuleType === 'video' ? (
-                          <Input
-                            value={newModuleContent}
-                            onChange={(e) => setNewModuleContent(e.target.value)}
-                            placeholder="Pega aquí el link/embed del video"
-                            disabled={isSavingCourse}
-                          />
-                        ) : newModuleType === 'practica_presencial' ? (
-                          <Textarea value={PRACTICA_PRESENCIAL_MESSAGE} disabled className="min-h-[90px]" />
-                        ) : newModuleType === 'lectura' ? (
-                          <div className="space-y-2">
-                            <div className="text-xs text-gray-600">
-                              El archivo es simulado: solo se guarda el nombre (no se sube el documento).
-                            </div>
-
-                            <Input
-                              type="file"
-                              disabled={isSavingCourse}
-                              onChange={(e) => {
-                                const file = (e.target as HTMLInputElement).files?.[0];
-                                setNewModuleFileName(file?.name || '');
-                              }}
-                            />
-
-                            {newModuleFileName ? (
-                              <div className="text-xs text-gray-700">
-                                Archivo seleccionado:{' '}
-                                <span className="font-medium">{newModuleFileName}</span>
-                              </div>
-                            ) : null}
-
-                            <Textarea
-                              value={newModuleContent}
-                              onChange={(e) => setNewModuleContent(e.target.value)}
-                              className="min-h-[90px]"
-                              placeholder="Instrucciones de lectura (qué debe revisar, puntos clave, etc.)"
-                              disabled={isSavingCourse}
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {newModuleQuiz.length === 0 ? (
-                              <div className="text-sm text-gray-600 rounded-md border p-3">
-                                Aún no hay preguntas.
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {newModuleQuiz.map((q, qIndex) => (
-                                  <div key={qIndex} className="rounded-md border p-3 space-y-3 bg-white">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-sm font-semibold text-gray-900">
-                                        Pregunta {qIndex + 1}
-                                      </div>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setNewModuleQuiz((prev) => prev.filter((_, i) => i !== qIndex))}
-                                        disabled={isSavingCourse}
-                                      >
-                                        Quitar
-                                      </Button>
-                                    </div>
-
-                                    <div className="grid sm:grid-cols-2 gap-3">
-                                      <div>
-                                        <div className="text-xs font-medium text-gray-700 mb-1">Tipo</div>
-                                        <Select
-                                          value={q.tipo}
-                                          onValueChange={(v) => {
-                                            const nextTipo = v as QuizTipoPregunta;
-                                            setNewModuleQuiz((prev) =>
-                                              prev.map((qq, i) => {
-                                                if (i !== qIndex) return qq;
-                                                const base: QuizPregunta = { ...qq, tipo: nextTipo };
-                                                if (nextTipo === 'seleccion_multiple') {
-                                                  return {
-                                                    ...base,
-                                                    opciones:
-                                                      Array.isArray(base.opciones) && base.opciones.length > 0
-                                                        ? base.opciones
-                                                        : [
-                                                            { texto: 'Opción 1', correcta: true },
-                                                            { texto: 'Opción 2', correcta: false },
-                                                          ],
-                                                  };
-                                                }
-                                                return { ...base, opciones: undefined };
-                                              })
-                                            );
-                                          }}
-                                        >
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Selecciona" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="seleccion_multiple">Selección múltiple</SelectItem>
-                                            <SelectItem value="respuesta_escrita">Respuesta escrita</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </div>
-
-                                    <div>
-                                      <div className="text-xs font-medium text-gray-700 mb-1">Enunciado</div>
-                                      <Textarea
-                                        value={q.pregunta || ''}
-                                        onChange={(e) =>
-                                          setNewModuleQuiz((prev) =>
-                                            prev.map((qq, i) =>
-                                              i === qIndex ? { ...qq, pregunta: e.target.value } : qq
-                                            )
-                                          )
-                                        }
-                                        className="min-h-[70px]"
-                                        disabled={isSavingCourse}
-                                      />
-                                    </div>
-
-                                    {q.tipo === 'seleccion_multiple' ? (
-                                      <div className="space-y-2">
-                                        <div className="text-xs font-medium text-gray-700">Opciones</div>
-                                        {(q.opciones || []).map((opt, optIndex) => (
-                                          <div key={optIndex} className="flex items-center gap-2">
-                                            <Checkbox
-                                              checked={!!opt.correcta}
-                                              onCheckedChange={() => {
-                                                setNewModuleQuiz((prev) =>
-                                                  prev.map((qq, i) => {
-                                                    if (i !== qIndex) return qq;
-                                                    const opciones = (qq.opciones || []).map((oo, oi) => ({
-                                                      ...oo,
-                                                      correcta: oi === optIndex,
-                                                    }));
-                                                    return { ...qq, opciones };
-                                                  })
-                                                );
-                                              }}
-                                              disabled={isSavingCourse}
-                                            />
-                                            <Input
-                                              value={opt.texto || ''}
-                                              onChange={(e) => {
-                                                setNewModuleQuiz((prev) =>
-                                                  prev.map((qq, i) => {
-                                                    if (i !== qIndex) return qq;
-                                                    const opciones = (qq.opciones || []).map((oo, oi) =>
-                                                      oi === optIndex ? { ...oo, texto: e.target.value } : oo
-                                                    );
-                                                    return { ...qq, opciones };
-                                                  })
-                                                );
-                                              }}
-                                              placeholder={`Opción ${optIndex + 1}`}
-                                              disabled={isSavingCourse}
-                                            />
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => {
-                                                setNewModuleQuiz((prev) =>
-                                                  prev.map((qq, i) => {
-                                                    if (i !== qIndex) return qq;
-                                                    const before = qq.opciones || [];
-                                                    const opciones = before.filter((_, oi) => oi !== optIndex);
-                                                    if (opciones.length > 0 && !opciones.some((o) => o.correcta)) {
-                                                      opciones[0] = { ...opciones[0], correcta: true };
-                                                    }
-                                                    return { ...qq, opciones };
-                                                  })
-                                                );
-                                              }}
-                                              disabled={isSavingCourse}
-                                            >
-                                              −
-                                            </Button>
-                                          </div>
-                                        ))}
-
-                                        <div>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                              setNewModuleQuiz((prev) =>
-                                                prev.map((qq, i) => {
-                                                  if (i !== qIndex) return qq;
-                                                  const opciones = [...(qq.opciones || [])];
-                                                  opciones.push({
-                                                    texto: `Opción ${opciones.length + 1}`,
-                                                    correcta: opciones.length === 0,
-                                                  });
-                                                  return { ...qq, opciones };
-                                                })
-                                              );
-                                            }}
-                                            disabled={isSavingCourse}
-                                          >
-                                            Añadir opción
-                                          </Button>
-                                        </div>
-
-                                        <div className="text-xs text-gray-600">
-                                          Marca con el check la opción correcta (solo una).
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div>
-                                        <div className="text-xs font-medium text-gray-700 mb-1">
-                                          Respuesta modelo (opcional)
-                                        </div>
-                                        <Textarea
-                                          value={q.respuestaModelo || ''}
-                                          onChange={(e) =>
-                                            setNewModuleQuiz((prev) =>
-                                              prev.map((qq, i) =>
-                                                i === qIndex ? { ...qq, respuestaModelo: e.target.value } : qq
-                                              )
-                                            )
-                                          }
-                                          className="min-h-[70px]"
-                                          disabled={isSavingCourse}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            <div>
-                              <Button
-                                type="button"
-                                onClick={() => {
-                                  setNewModuleQuiz((prev) => [
-                                    ...prev,
-                                    {
-                                      tipo: 'seleccion_multiple',
-                                      pregunta: '',
-                                      opciones: [
-                                        { texto: 'Opción 1', correcta: true },
-                                        { texto: 'Opción 2', correcta: false },
-                                      ],
-                                    },
-                                  ]);
-                                }}
-                                disabled={isSavingCourse}
-                              >
-                                Añadir pregunta
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex justify-end">
-                        <Button onClick={addModule} disabled={isSavingCourse || !newModuleTitle.trim()}>
-                          Añadir
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-4 border-t bg-white">
-              <DialogFooter>
-                <Button variant="outline" onClick={closeEditDialog} disabled={isSavingCourse}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSaveCourse} disabled={isSavingCourse || !editCourseId}>
-                  {isSavingCourse ? 'Guardando…' : 'Guardar cambios'}
-                </Button>
-              </DialogFooter>
-            </div>
           </DialogContent>
         </Dialog>
       </main>

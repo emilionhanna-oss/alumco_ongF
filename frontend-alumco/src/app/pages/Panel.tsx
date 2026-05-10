@@ -173,8 +173,41 @@ export default function Panel() {
             </CardContent>
           </Card>
 
+          {(() => {
+            const roles = (user as any)?.rol;
+            const isProfesor = Array.isArray(roles) && roles.includes('profesor');
+            return isProfesor ? (
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate('/profesor')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') navigate('/profesor');
+                }}
+              >
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <GraduationCap className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <CardTitle>Gestión de Capacitaciones</CardTitle>
+                      <CardDescription>Panel del profesor</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-600">
+                    Accede a tus cursos, gestiona estudiantes y autoriza prácticas presenciales.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null;
+          })()}
+
           <Card
-            className="hover:shadow-lg transition-shadow sm:col-span-2 lg:col-span-1 cursor-pointer"
+            className="hover:shadow-lg transition-shadow cursor-pointer"
             role="button"
             tabIndex={0}
             onClick={() => navigate('/perfil')}

@@ -3,11 +3,18 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
+// Importamos el seeder
+const { seedDatabase } = require('./src/seeders/seed');
+
 // Importamos la ruta de autenticación
 const authRoutes = require('./src/routes/authRoutes');
 const courseRoutes = require('./src/routes/courseRoutes');
 const usersRoutes = require('./src/routes/usersRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const profesorRoutes = require('./src/routes/profesorRoutes');
+const quizRoutes = require('./src/routes/quizRoutes');
+const reportesRoutes = require('./src/routes/reportesRoutes');
+const sedesRoutes = require('./src/routes/sedesRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,10 +40,23 @@ app.get('/', (req, res) => {
   res.send('¡Servidor de Alumco funcionando correctamente!');
 });
 
+app.get('/test-auth', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const [scheme, token] = authHeader.split(' ');
+  const jwt = require('jsonwebtoken');
+  const SECRET_KEY = process.env.JWT_SECRET || 'dev_insecure_change_me';
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
+    res.json({ ok: true, decoded });
+  } catch(e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // Conectamos la ruta de auth
 app.use('/api/auth', authRoutes);
 
-// Conectamos rutas de cursos (fuente de verdad: data/db.json)
+// Conectamos rutas de cursos (fuente de verdad: backend PostgreSQL)
 app.use('/api/cursos', courseRoutes);
 
 // Usuarios (admin-only)
@@ -45,6 +65,25 @@ app.use('/api/usuarios', usersRoutes);
 // Perfil de usuario (auth-required)
 app.use('/api/user', userRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+// Rutas del profesor (profesor-only o admin)
+app.use('/api/profesor', profesorRoutes);
+
+// Rutas de quiz (autenticado)
+app.use('/api/quiz', quizRoutes);
+
+// Reportes e importación (admin-only)
+app.use('/api/reportes', reportesRoutes);
+
+// Sedes
+app.use('/api/sedes', sedesRoutes);
+
+// Seed database and start server
+seedDatabase()
+  .catch((err) => {
+    console.error('❌ Error en seed, iniciando sin datos:', err.message);
+  })
+  .finally(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    });
+  });

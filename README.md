@@ -1,315 +1,117 @@
-# Plataforma de Capacitacion Digital Alumco
+# Plataforma de Capacitación Digital Alumco 🎓
 
-LMS (Learning Management System) para la ONG Alumco, orientado a la capacitacion de colaboradores de ELEAM.
-El sistema incluye experiencia para usuarios finales, herramientas de administracion avanzadas, autenticacion con JWT y persistencia local en JSON.
+Sistema de Gestión de Aprendizaje (LMS) desarrollado a medida para la ONG Alumco. Esta plataforma está diseñada específicamente para administrar, capacitar y certificar a los colaboradores de ELEAM a lo largo de Chile, proporcionando una experiencia de aprendizaje intuitiva y un panel de administración robusto.
 
----
-
-## Stack Tecnologico
-
-- Frontend: React 18 + Vite + TypeScript + Tailwind + Radix UI
-- Backend: Node.js + Express + JWT
-- Persistencia: archivo JSON local (backend-alumco/data/db.json)
-- Estilos/UI: componentes reutilizables + Lucide icons + Sonner (toasts)
+![Alumco LMS](backend-alumco/public/alumco-logo.png)
 
 ---
 
-## Funcionalidades del Software (Completo)
+## 🚀 Características Principales
 
-### 1. Autenticacion y Control de Acceso
+### Para los Usuarios (Estudiantes)
+* **Autenticación Segura**: Sistema de registro y login con validación estricta de RUT chileno.
+* **Panel de Aprendizaje**: Tablero visual interactivo para llevar el registro del avance en las capacitaciones.
+* **Cursos Dinámicos**: Soporte para cápsulas de video, material de lectura interactivo, actividades presenciales y Quizzes integrados con calificación automática (mínimo 60% de aprobación).
+* **Certificados Digitales Automáticos**: Emisión de diplomas en formato PDF con firma digital del instructor y código Hash QR verificable públicamente.
 
-- Login con JWT (token Bearer, expiracion 2 horas).
-- Registro real contra backend (no mock local).
-- Restauracion de sesion desde localStorage con control de version de esquema de auth.
-- Redireccion por rol tras login:
-  - admin -> dashboard admin
-  - usuario/profesor -> panel de aprendizaje
-- Bloqueo de acceso por estado de cuenta:
-  - pendiente: no puede ingresar hasta aprobacion admin
-  - vencido: acceso denegado
-- Verificacion de estado al autenticar y tambien en middleware protegido.
-
-### 2. Registro de Usuario (Sign Up)
-
-- Formulario profesional con campos obligatorios:
-  - Nombre completo
-  - RUT
-  - Genero (femenino, masculino, otro con iconos)
-  - Sede
-  - Correo
-  - Contrasena
-  - Confirmar contrasena
-- Sedes oficiales habilitadas:
-  - Hualpen (Region del Biobio)
-  - Coyhaique (Region de Aysen)
-- Validaciones en frontend y backend:
-  - Contrasenas iguales
-  - Correo valido
-  - Largo minimo de contrasena
-  - RUT valido con digito verificador (modulo 11)
-  - Mensaje inline bajo campo RUT cuando es invalido (tras blur o submit)
-- RUT con mascara/formato en tiempo real (X.XXX.XXX-X).
-- Registro inicial con estado de aprobacion:
-  - estado = pendiente
-  - rol = usuario
-  - cargo = Pendiente de asignacion
-  - fechaRegistro y fechaExpiracion inicializadas
-
-### 3. Gestion de RUT (End-to-End)
-
-- Normalizacion para almacenamiento (sin puntos ni guion, DV incluido).
-- Formateo para visualizacion (X.XXX.XXX-X).
-- Validacion matematica del digito verificador en frontend y backend.
-- Busqueda tolerante por RUT en admin (con/sin puntos y guion).
-
-### 4. Experiencia Usuario (Panel y Cursos)
-
-- Panel principal con:
-  - resumen de cursos
-  - estado de conexion con backend
-  - acceso directo a perfil
-- Listado de cursos asignados al usuario autenticado.
-- Detalle de curso con:
-  - imagen hero
-  - progreso calculado
-  - timeline visual por modulos
-  - navegacion de retorno segura (whitelist de rutas internas)
-- Tipos de modulo soportados:
-  - Video
-  - Lectura
-  - Quiz
-  - Practica presencial (mensaje fijo institucional)
-
-### 5. Perfil de Usuario y Certificados
-
-- Edicion de perfil:
-  - nombre completo
-  - RUT
-  - cargo (solo editable por admin)
-  - rol en solo lectura
-- Firma para certificados:
-  - texto (firma tipografica)
-  - imagen PNG/JPG (con limite de tamano)
-- Requisito de firma para certificados:
-  - sin firma configurada, no se habilita descarga
-- Descarga de certificado imprimible/PDF al completar 100%.
-
-### 6. Dashboard de Administracion
-
-- Portal admin con accesos a:
-  - Alertas
-  - Mi Aprendizaje (admin)
-  - Gestion de Capacitaciones
-  - Dashboard de Metricas
-  - Centro de Usuarios
-  - Perfil
-- Badge de usuarios pendientes en tarjeta de Centro de Usuarios.
-
-### 7. Centro de Usuarios (Admin Avanzado)
-
-- Vista segmentada por estado:
-  - pendientes
-  - activos
-  - vencidos
-- Filtros combinables por:
-  - nombre/RUT
-  - sede
-  - cargo
-- Edicion avanzada por modal:
-  - RUT
-  - sede (select)
-  - cargo (select por catalogo de areas ELEAM)
-  - estado
-  - fecha de expiracion
-  - roles multiples (administrador, profesor, usuario)
-- Reglas de negocio:
-  - al editar un pendiente, pasa automaticamente a activo
-  - sedes y cargos validados en backend
-  - roles validados y normalizados en backend
-
-### 8. Gestion de Capacitaciones (Admin)
-
-- Listado completo de cursos (modo admin all=1).
-- Crear curso nuevo rapidamente.
-- Editar curso existente (dialogo y editor pro full-page).
-- Eliminar curso.
-- Asignacion de alumnos a curso.
-
-### 9. Editor Pro de Cursos
-
-- Edicion completa de metadatos del curso:
-  - titulo
-  - descripcion
-  - imagen
-- Gestion de modulos:
-  - agregar
-  - editar
-  - eliminar
-  - reordenar (subir/bajar)
-- Soporte de quiz estructurado:
-  - seleccion multiple
-  - respuesta escrita
-  - validacion para evitar quiz vacio
-- Lectura con contenido e identificador de archivo (simulado por nombre).
-- Practica presencial normalizada con mensaje fijo.
-- Protecciones UX:
-  - alerta por cambios sin guardar al salir
-  - alerta beforeunload (recarga/cierre)
-- Asignacion masiva a curso por:
-  - sede
-  - cargo
-
-### 10. Dashboard de Metricas (Admin)
-
-- KPIs globales:
-  - inscripciones totales
-  - completadas
-  - ratio completadas/inscritas
-- Progreso promedio por sede.
-- Distribucion de usuarios por cargo.
-- Exclusiones aplicadas al calculo (por ejemplo usuarios pendientes).
-
-### 11. API Backend y Reglas de Seguridad
-
-- Auth:
-  - POST /api/auth/login
-  - POST /api/auth/register
-  - GET /api/auth/sedes
-- Cursos:
-  - GET /api/cursos
-  - GET /api/cursos/:id
-  - POST /api/cursos (admin)
-  - PUT /api/cursos/:id (admin)
-  - DELETE /api/cursos/:id (admin)
-  - PUT /api/cursos/:id/alumnos (admin)
-- Usuarios:
-  - GET /api/usuarios (admin)
-  - PUT /api/usuarios/:id (admin)
-- Perfil:
-  - GET /api/user/profile
-  - PUT /api/user/profile
-- Seguridad:
-  - middleware requireAuth + requireAdmin
-  - verificacion de token JWT
-  - control de estados pendiente/vencido
-  - saneamiento de datos de curso/perfil
+### Para la Administración
+* **Gestión de Sedes y Usuarios**: CRUD completo para administrar centros ELEAM y control avanzado de accesos (estado de usuarios, roles, vencimientos de cuenta).
+* **Editor Pro de Cursos**: Constructor de módulos y quizzes integrado para crear capacitaciones sin necesidad de conocimientos técnicos.
+* **Dashboard de Métricas**: Indicadores KPI en tiempo real sobre el progreso de las sedes, finalización de cursos y embudos de inscripción.
+* **Importación/Exportación Masiva**: Carga de bases de datos de usuarios desde archivos Excel (`.xlsx`) y exportación de reportes de avance completos.
 
 ---
 
-## Instalacion y Ejecucion
+## 🛠️ Stack Tecnológico
 
-### 1) Clonar
+El proyecto está construido sobre una arquitectura moderna basada en componentes y contenedores:
 
+### Frontend
+* **Framework**: React 18 (Vite)
+* **Lenguaje**: TypeScript
+* **Estilos**: Tailwind CSS + Componentes Radix UI
+* **Iconografía y Feedback**: Lucide React + Sonner (Toasts)
+
+### Backend
+* **Entorno**: Node.js + Express
+* **Base de Datos**: PostgreSQL
+* **Autenticación**: JSON Web Tokens (JWT)
+* **Generación de PDFs**: PDFKit
+
+### Infraestructura
+* **Contenedores**: Docker & Docker Compose
+* **Gestión de Archivos**: Multer + XLSX para procesamiento de hojas de cálculo
+
+---
+
+## ⚙️ Instalación y Ejecución Local
+
+La forma más sencilla de ejecutar este proyecto es mediante Docker.
+
+### 1. Requisitos Previos
+- Instalar [Git](https://git-scm.com/)
+- Instalar [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Asegúrate de que el motor de Docker esté corriendo).
+
+### 2. Clonar el repositorio
 ```bash
 git clone <URL_DEL_REPO>
 cd alumco_ong
 ```
 
-### 2) Instalar dependencias
-
-Backend:
-
+### 3. Configurar Variables de Entorno
+Copia los archivos de ejemplo para crear tu configuración local:
 ```bash
-cd backend-alumco
-npm install
+# En Windows (CMD o PowerShell)
+copy backend-alumco\.env.example backend-alumco\.env
+copy frontend-alumco\.env.example frontend-alumco\.env
+
+# En Linux/Mac
+cp backend-alumco/.env.example backend-alumco/.env
+cp frontend-alumco/.env.example frontend-alumco/.env
 ```
 
-Frontend:
-
-```bash
-cd frontend-alumco
-npm install
-```
-
-### 3) Variables de entorno
-
-Backend:
-
-- Copia backend-alumco/.env.example a backend-alumco/.env
-- Valores base:
-  - PORT=3000
-  - CORS_ORIGIN=http://localhost:5173
-  - JWT_SECRET=change_me_in_local_env
-
-Frontend:
-
-- Copia frontend-alumco/.env.example a frontend-alumco/.env
-- Valor recomendado:
-  - VITE_API_URL=http://localhost:3000
-
-### 4) Ejecutar proyecto
-
-Opcion A (Windows):
-
+### 4. Ejecutar el Proyecto
+En Windows, simplemente haz doble clic en el script proporcionado o ejecútalo desde consola:
 ```bat
 iniciar_proyecto.bat
 ```
+*(Selecciona la opción 1 para iniciar todos los contenedores).*
 
-Opcion B (manual en 2 terminales):
-
-Backend:
-
+Alternativamente, si estás en otro sistema operativo o prefieres usar Docker manualmente:
 ```bash
-cd backend-alumco
-npm run dev
+docker compose up -d --build
 ```
 
-Frontend:
+**La base de datos se inicializará automáticamente** con el esquema estructural correcto gracias al script interno de PostgreSQL.
 
-```bash
-cd frontend-alumco
-npm run dev
-```
-
-URLs por defecto:
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3000
-
-Nota para PowerShell en Windows:
-
-- Si `npm` falla por ExecutionPolicy, usa `npm.cmd`.
+### 5. Acceder a la plataforma
+* **Aplicación Web**: http://localhost:5173
+* **API Backend**: http://localhost:3000
 
 ---
 
-## Persistencia y Estructura de Datos
+## 🔐 Primeros Pasos y Administración
 
-- Fuente de verdad: backend-alumco/data/db.json
-- Estructuras principales:
-  - usuarios
-  - cursos
-- Estaticos:
-  - backend-alumco/public/alumco-logo.png
-  - backend-alumco/public/course-images/
+Por medidas de seguridad, todos los usuarios nuevos que se registren tendrán el estado de `"Pendiente"`. Para activar a tu primer administrador:
+1. Regístrate normalmente en la plataforma desde el Frontend.
+2. Ingresa a la base de datos PostgreSQL local (`localhost:5432`) o utiliza la terminal de Docker.
+3. Cambia tu propio estado a `"activo"` y agrega tu ID a la tabla `usuario_roles` con el rol `admin`.
+4. A partir de ese momento, podrás gestionar todas las futuras solicitudes directamente desde la interfaz del Dashboard Administrativo.
 
 ---
 
-## Estructura del Repositorio
+## 📦 Estructura del Repositorio
 
-- backend-alumco/
-  - server.js
-  - src/routes/
-  - src/controllers/
-  - src/services/
-  - src/middlewares/
-  - src/utils/
-  - data/db.json
-  - public/
-
-- frontend-alumco/
-  - src/app/pages/
-  - src/app/components/
-  - src/app/services/
-  - src/app/contexts/
-  - src/app/config/
-  - src/app/types/
+* `backend-alumco/`: Código fuente de la API Node.js.
+  * `src/routes/` y `src/controllers/`: Lógica de endpoints.
+  * `src/services/`: Lógica pesada (Generación de PDFs, Excel, etc).
+  * `alumco_schema_BDD_postgre.sql`: Estructura base de la DB.
+* `frontend-alumco/`: Aplicación React (SPA).
+  * `src/app/pages/`: Pantallas principales de la plataforma.
+  * `src/app/components/`: Componentes UI reutilizables (Botones, Tablas, Modales).
+* `docker-compose.yml`: Orquestador de contenedores (Frontend, Backend y DB).
+* `iniciar_proyecto.bat`: Script de utilidad para Windows.
 
 ---
 
-## Consideraciones Operativas
-
-- El proyecto esta optimizado para entorno local y persistencia JSON.
-- No versionar .env, node_modules ni dist.
-- Para administradores nuevos, el flujo recomendado es:
-  - registrar usuario
-  - aprobar y asignar rol admin desde Centro de Usuarios
+*Desarrollado con ❤️ para ONG Alumco.*

@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { buildApiUrl, API_CONFIG } from '../config/api.config';
 import { userService } from '../services/apiService';
+import { QuizResponder } from '../components/quiz';
 import type { CursoBackend, CursoModulo } from '../types';
 
 type LoadState =
@@ -55,10 +56,10 @@ function normalizeModulo(
       : raw ?? (tipo === 'quiz' ? [] : '');
 
   return {
+    ...modulo,
     tituloModulo: modulo.tituloModulo || 'Módulo sin título',
     tipo,
     contenido,
-    ...modulo,
   };
 }
 
@@ -69,6 +70,7 @@ export default function CursoDetalle() {
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [hasProfileSignature, setHasProfileSignature] = useState(false);
+  const [viendoQuizModuloId, setViendoQuizModuloId] = useState<string | null>(null);
 
   const backTo = useMemo(() => {
     const raw = (location.state as any)?.from;
@@ -207,6 +209,9 @@ export default function CursoDetalle() {
 
   const { curso } = state;
   const modulos = (curso.modulos || []).map(normalizeModulo);
+  
+  // Force re-render on reload
+  const forceRenderKey = Math.random();
   const heroImageUrl = curso.imagen
     ? String(curso.imagen).startsWith('http')
       ? curso.imagen
@@ -227,6 +232,24 @@ export default function CursoDetalle() {
   const progressValue = hasAnyCompletionFlag
     ? computedProgress
     : Math.max(0, Math.min(100, Number(curso.progreso ?? 0)));
+
+  const handleMarcarListo = async (moduloId: number) => {
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(buildApiUrl(`/api/cursos/${curso.id}/modulos/${moduloId}/completar`), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert('Error al marcar el módulo como completado.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión.');
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -277,10 +300,30 @@ export default function CursoDetalle() {
               <div>
                 <div className="text-sm font-semibold text-emerald-900">¡Felicidades! Completaste este curso.</div>
                 <div className="text-sm text-emerald-900/90">
-                  Tu certificado ya está disponible en tu Perfil.
+                  Ya puedes descargar tu certificado de participación.
                 </div>
               </div>
-              <Button onClick={() => navigate('/perfil')}>Ver mi certificado</Button>
+              <Button onClick={() => {
+                const token = localStorage.getItem('token') || '';
+                fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COURSES.DETAIL(cursoId)) + '/certificado', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                })
+                .then(res => {
+                  if (!res.ok) throw new Error('Error al descargar el certificado');
+                  return res.blob();
+                })
+                .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Certificado_${curso.titulo}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  window.URL.revokeObjectURL(url);
+                })
+                .catch(err => alert(err.message));
+              }}>Descargar Certificado</Button>
             </CardContent>
           </Card>
         ) : (
@@ -309,6 +352,8 @@ export default function CursoDetalle() {
           {modulos.map((modulo, index) => {
             const isCompleted = index < completedCount;
             const isCurrent = index === completedCount && completedCount < modulos.length;
+
+
 
             // Camino marcado hasta el módulo actual (incluye el actual)
             const isPathToThisMarked = index <= completedCount;
@@ -449,77 +494,90 @@ export default function CursoDetalle() {
                     </div>
                   ) : (
                     (() => {
-                      const raw = modulo.contenido;
+                      // Si es quiz - mostrar directamente si no está completado
+                      const esCompletado = isCompleted;
+                      const estaBloqueado = false; // TODO: obtener del estado real en FASE 3
 
-                      if (Array.isArray(raw)) {
-                        const preguntas = raw as QuizPregunta[];
+                      // DEBUG
+                      console.log('Quiz rendering:', {
+                        index,
+                        completedCount,
+                        isCompleted,
+                        esCompletado,
+                        estaBloqueado,
+                        'modulo.id': modulo.id,
+                        'tipo modulo.id': typeof modulo.id,
+                        showQuizResponder: !esCompletado && !estaBloqueado && modulo.id
+                      });
+
+                      // Si el quiz no está completado, mostrar el QuizResponder directamente (interactivo)
+                      if (!esCompletado && !estaBloqueado && modulo.id) {
                         return (
-                          <div className="space-y-3">
-                            <div className="rounded-lg border bg-gray-50 p-4">
-                              <p className="text-sm font-medium text-gray-900">Actividad tipo quiz</p>
-                              <p className="text-xs text-gray-600 mt-1">
-                                {preguntas.length} pregunta{preguntas.length === 1 ? '' : 's'}
-                              </p>
-                            </div>
-
-                            {preguntas.length === 0 ? (
-                              <div className="text-sm text-gray-600 rounded-md border p-3">Aún no hay preguntas.</div>
-                            ) : (
-                              <div className="space-y-3">
-                                {preguntas.map((p, i) => (
-                                  <div key={i} className="rounded-lg border p-4">
-                                    <div className="text-sm font-semibold text-gray-900">Pregunta {i + 1}</div>
-                                    <div className="text-sm text-gray-800 mt-2 whitespace-pre-line">
-                                      {p.pregunta || 'Sin enunciado.'}
-                                    </div>
-
-                                    {p.tipo === 'seleccion_multiple' ? (
-                                      <ul className="mt-3 space-y-2">
-                                        {(p.opciones || []).map((opt, oi) => (
-                                          <li key={oi} className="flex items-start gap-2 text-sm text-gray-800">
-                                            <span
-                                              className={`mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
-                                                opt.correcta
-                                                  ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
-                                                  : 'bg-white border-gray-300 text-gray-400'
-                                              }`}
-                                              aria-label={opt.correcta ? 'Correcta' : 'No correcta'}
-                                            >
-                                              ✓
-                                            </span>
-                                            <span className="whitespace-pre-line">{opt.texto || `Opción ${oi + 1}`}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <div className="mt-3 rounded-md border bg-gray-50 p-3">
-                                        <div className="text-xs font-medium text-gray-700">Respuesta escrita</div>
-                                        {p.respuestaModelo ? (
-                                          <div className="text-sm text-gray-800 mt-2 whitespace-pre-line">
-                                            {p.respuestaModelo}
-                                          </div>
-                                        ) : (
-                                          <div className="text-sm text-gray-600 mt-1">Sin respuesta modelo.</div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          <QuizResponder
+                            modulo_id={modulo.id}
+                            onVolver={() => setViendoQuizModuloId(null)}
+                          />
                         );
                       }
 
+                      // Vista previa estática (solo si está completado o bloqueado)
+                      const raw = modulo.contenido;
+                      const preguntas = Array.isArray(raw) ? (raw as QuizPregunta[]) : [];
+
                       return (
-                        <div className="rounded-lg border bg-gray-50 p-4">
-                          <p className="text-sm font-medium text-gray-900">Actividad tipo quiz</p>
-                          <p className="text-sm text-gray-700 mt-2 whitespace-pre-line">
-                            {typeof raw === 'string' ? raw : 'Contenido de quiz no disponible.'}
-                          </p>
+                        <div className="space-y-4">
+                          {/* Descripción del quiz */}
+                          <div className="rounded-lg border bg-blue-50 p-4">
+                            <p className="text-sm font-medium text-blue-900">Actividad tipo Quiz - Completado</p>
+                            <p className="text-xs text-blue-800 mt-1">
+                              {preguntas.length} pregunta{preguntas.length === 1 ? '' : 's'} • Calificación automática
+                            </p>
+                          </div>
+
+                          {/* Vista previa (solo si está completado) */}
+                          {preguntas.length > 0 && (
+                            <div className="rounded-lg border bg-gray-50 p-4 max-h-48 overflow-y-auto">
+                              <p className="text-xs font-medium text-gray-700 mb-3">Vista previa de preguntas:</p>
+                              <div className="space-y-2">
+                                {preguntas.slice(0, 3).map((p, i) => (
+                                  <div key={i} className="text-sm text-gray-700">
+                                    <span className="font-medium">P{i + 1}:</span> {p.pregunta || 'Sin enunciado'}
+                                  </div>
+                                ))}
+                                {preguntas.length > 3 && (
+                                  <div className="text-xs text-gray-600 italic">
+                                    +{preguntas.length - 3} pregunta(s) más...
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {estaBloqueado && (
+                            <div className="rounded-lg border border-red-300 bg-red-50 p-3">
+                              <p className="text-sm font-semibold text-red-900">🔒 Bloqueado temporalmente</p>
+                            </div>
+                          )}
+
+                          {esCompletado && (
+                            <Button
+                              onClick={() => setViendoQuizModuloId(modulo.id)}
+                              variant="outline"
+                              className="w-full"
+                            >
+                              Ver Resultado
+                            </Button>
+                          )}
                         </div>
                       );
                     })()
+                  )}
+
+                  {/* Botón Marcar Listo para contenido manual */}
+                  {(modulo.tipo === 'video' || modulo.tipo === 'lectura') && !isCompleted && (
+                    <div className="mt-6 flex justify-end">
+                      <Button onClick={() => handleMarcarListo(modulo.id!)}>Marcar como listo</Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -66,7 +66,11 @@ export default function Login() {
         const roles = (result.user as any)?.rol;
         const isAdminUser = Array.isArray(roles) && roles.includes('admin');
 
-        navigate(isAdminUser ? '/admin' : '/panel');
+        if (isAdminUser) {
+          navigate('/admin');
+        } else {
+          navigate('/panel');
+        }
       } else {
         // Mostrar error de forma amable
         setError(result.error || 'Error al iniciar sesión. Por favor intente de nuevo.');

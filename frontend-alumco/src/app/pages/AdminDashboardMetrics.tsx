@@ -139,12 +139,9 @@ export default function AdminDashboardMetrics() {
       0
     );
 
-    const completadas = courses.reduce((acc, course) => {
-      if (Number(course.progress || 0) >= 100) {
-        return acc + (Array.isArray(course.alumnosInscritos) ? course.alumnosInscritos.length : 0);
-      }
-      return acc;
-    }, 0);
+    const completadas = courses.filter(
+      (course) => Number(course.progress || 0) >= 100
+    ).length;
 
     return {
       progressBySede,
@@ -154,8 +151,8 @@ export default function AdminDashboardMetrics() {
     };
   }, [state]);
 
-  const completionRatio = metrics.totalInscripciones > 0
-    ? safePercent((metrics.completadas / metrics.totalInscripciones) * 100)
+  const completionRatio = (state.status === 'ready' && (state.courses || []).length > 0)
+    ? safePercent((metrics.completadas / (state.courses || []).length) * 100)
     : 0;
 
   return (
@@ -181,6 +178,24 @@ export default function AdminDashboardMetrics() {
               <Button onClick={() => navigate('/admin')} variant="outline" className="flex items-center gap-2">
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Volver</span>
+              </Button>
+              <Button onClick={() => {
+                const token = localStorage.getItem('token') || '';
+                fetch(buildApiUrl('/api/reportes/dashboard/exportar'), {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                })
+                .then(res => res.blob())
+                .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `reporte_dashboard_alumco.xlsx`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                });
+              }}>
+                Exportar Reporte
               </Button>
               <Button
                 onClick={() => {
@@ -241,14 +256,14 @@ export default function AdminDashboardMetrics() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Completadas</CardDescription>
+                  <CardDescription>Cursos 100% completados</CardDescription>
                   <CardTitle>{metrics.completadas}</CardTitle>
                 </CardHeader>
               </Card>
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Relación completadas / inscritas</CardDescription>
+                  <CardDescription>Cursos completados / total cursos</CardDescription>
                   <CardTitle>{completionRatio}%</CardTitle>
                 </CardHeader>
               </Card>

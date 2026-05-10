@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { Toaster } from '../components/ui/sonner';
 import {
@@ -27,77 +28,26 @@ import {
 } from '../components/ui/select';
 import { courseService, userService } from '../services/apiService';
 import type { CourseDetail, CursoModulo, User } from '../types';
-
-const PRACTICA_PRESENCIAL_MESSAGE =
-  'Se le ha notificado a tu instructor que has finalizado la parte teórica. Por favor, espera a ser contactado para coordinar tu evaluación práctica presencial';
-
-type ModuloTipo = 'video' | 'lectura' | 'quiz' | 'practica_presencial';
-
-type LecturaContenido = {
-  archivoNombre?: string;
-  instrucciones?: string;
-};
-
-type QuizTipoPregunta = 'seleccion_multiple' | 'respuesta_escrita';
-
-type QuizOpcion = {
-  texto: string;
-  correcta: boolean;
-};
-
-type QuizPregunta = {
-  tipo: QuizTipoPregunta;
-  pregunta: string;
-  opciones?: QuizOpcion[];
-  respuestaModelo?: string;
-};
-
-type ModuloContenido = string | LecturaContenido | QuizPregunta[];
-
-type EditModulo = {
-  tituloModulo: string;
-  tipo: ModuloTipo;
-  contenido: ModuloContenido;
-};
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-  );
-}
-
-function coerceContenidoForTipo(nextTipo: ModuloTipo, prev: ModuloContenido): ModuloContenido {
-  if (nextTipo === 'practica_presencial') return PRACTICA_PRESENCIAL_MESSAGE;
-
-  if (nextTipo === 'quiz') {
-    if (Array.isArray(prev)) return prev;
-    return [];
-  }
-
-  if (nextTipo === 'lectura') {
-    if (isPlainObject(prev)) {
-      return {
-        archivoNombre: typeof prev.archivoNombre === 'string' ? prev.archivoNombre : undefined,
-        instrucciones: typeof prev.instrucciones === 'string' ? prev.instrucciones : undefined,
-      } satisfies LecturaContenido;
-    }
-    if (typeof prev === 'string') return { instrucciones: prev };
-    return { instrucciones: '' };
-  }
-
-  // video
-  if (typeof prev === 'string') return prev;
-  if (isPlainObject(prev) && typeof prev.instrucciones === 'string') return prev.instrucciones;
-  return '';
-}
+import {
+  PRACTICA_PRESENCIAL_MESSAGE,
+  type ModuloTipo,
+  type LecturaContenido,
+  type QuizTipoPregunta,
+  type QuizPregunta,
+  type ModuloContenido,
+  type EditModulo,
+} from '../types/moduleTypes';
+import { isPlainObject, coerceContenidoForTipo } from '../utils/moduleUtils';
 
 export default function AdminEditorCurso() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
 
   const courseId = useMemo(() => (id ? String(id) : ''), [id]);
+  const isNewCourse = courseId === 'nuevo';
+  const roles = Array.isArray((user as any)?.rol) ? (user as any).rol : [];
+  const isAdminUser = roles.includes('admin');
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -183,6 +133,12 @@ export default function AdminEditorCurso() {
   }, []);
 
   useEffect(() => {
+    const roleLabel = isAdminUser ? 'Admin' : 'Profesor';
+    const baseTitle = editTitle?.trim() ? editTitle.trim() : isNewCourse ? 'Nuevo curso' : 'Editar curso';
+    document.title = `${roleLabel} · ${baseTitle} | Alumco`;
+  }, [editTitle, isAdminUser, isNewCourse]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const load = async () => {
@@ -194,6 +150,31 @@ export default function AdminEditorCurso() {
 
       setIsLoading(true);
       setLoadError(null);
+
+      if (isNewCourse) {
+        if (!isMounted) return;
+        setEditTitle('');
+        setEditDescription('');
+        setEditImage('');
+        setEditModules([]);
+        setAssignedUserIds([]);
+        setSelectedIndex(0);
+        setBaselineSnapshot(
+          JSON.stringify({
+            editTitle: '',
+            editDescription: '',
+            editImage: '',
+            editModules: [],
+          })
+        );
+        setNewModuleTitle('');
+        setNewModuleType('lectura');
+        setNewModuleContent('');
+        setNewModuleFileName('');
+        setNewModuleQuiz([]);
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const response = await courseService.getCourseDetail(courseId);
@@ -330,7 +311,7 @@ export default function AdminEditorCurso() {
     return () => {
       isMounted = false;
     };
-  }, [courseId]);
+  }, [courseId, isNewCourse]);
 
   useEffect(() => {
     let isMounted = true;
@@ -428,6 +409,14 @@ export default function AdminEditorCurso() {
 
   const handleMassAssign = async (mode: 'sede' | 'cargo') => {
     if (!courseId || isMassAssigning) return;
+    if (!isAdminUser) {
+      toast.message('Solo un administrador puede inscribir usuarios.');
+      return;
+    }
+    if (isNewCourse) {
+      toast.message('Guarda el curso para poder inscribir usuarios.');
+      return;
+    }
 
     const selectedValue = mode === 'sede' ? massAssignSede : massAssignCargo;
     if (!selectedValue || selectedValue === 'all') {
@@ -483,26 +472,56 @@ export default function AdminEditorCurso() {
     setSaveError(null);
 
     try {
-      const response = await courseService.updateCourse(courseId, {
-        titulo: editTitle,
-        descripcion: editDescription,
-        imagen: editImage,
-        modulos: editModules.map((m) => ({
-          tituloModulo: m.tituloModulo,
-          tipo: m.tipo,
-          contenido: m.tipo === 'practica_presencial' ? PRACTICA_PRESENCIAL_MESSAGE : m.contenido,
-        })),
-      });
+      const modulosPayload = editModules.map((m) => ({
+        tituloModulo: m.tituloModulo,
+        tipo: m.tipo,
+        contenido: m.tipo === 'practica_presencial' ? PRACTICA_PRESENCIAL_MESSAGE : m.contenido,
+      }));
 
-      if (!response.success) {
-        setSaveError(response.error || 'No se pudo guardar');
-        return;
+      if (isNewCourse) {
+        const createResponse = await courseService.createCourse({
+          titulo: editTitle,
+          descripcion: editDescription,
+          imagen: editImage,
+        });
+
+        if (!createResponse.success || !createResponse.data?.id) {
+          setSaveError(createResponse.error || 'No se pudo crear el curso');
+          return;
+        }
+
+        if (modulosPayload.length > 0) {
+          const updateResponse = await courseService.updateCourse(String(createResponse.data.id), {
+            titulo: editTitle,
+            descripcion: editDescription,
+            imagen: editImage,
+            modulos: modulosPayload,
+          });
+
+          if (!updateResponse.success) {
+            setSaveError(updateResponse.error || 'No se pudo guardar');
+            return;
+          }
+        }
+      } else {
+        const response = await courseService.updateCourse(courseId, {
+          titulo: editTitle,
+          descripcion: editDescription,
+          imagen: editImage,
+          modulos: modulosPayload,
+        });
+
+        if (!response.success) {
+          setSaveError(response.error || 'No se pudo guardar');
+          return;
+        }
       }
 
       setBaselineSnapshot(currentSnapshot);
 
       const courseName = editTitle?.trim() ? editTitle.trim() : 'Sin título';
-      toast.success(`¡Curso ${courseName} guardado correctamente!`);
+      const actionLabel = isNewCourse ? 'creado' : 'guardado';
+      toast.success(`¡Curso ${courseName} ${actionLabel} correctamente!`);
 
       setIsRedirectingAfterSave(true);
 
@@ -511,7 +530,7 @@ export default function AdminEditorCurso() {
       }
 
       redirectTimerRef.current = window.setTimeout(() => {
-        navigate('/admin/gestion-capacitaciones');
+        navigate(isAdminUser ? '/admin/gestion-capacitaciones' : '/profesor');
       }, 2000);
     } finally {
       setIsSaving(false);
@@ -558,7 +577,7 @@ export default function AdminEditorCurso() {
       if (!ok) return;
     }
 
-    navigate('/admin/gestion-capacitaciones');
+    navigate(isAdminUser ? '/admin/gestion-capacitaciones' : '/profesor');
   };
 
   useEffect(() => {
@@ -582,9 +601,15 @@ export default function AdminEditorCurso() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm text-gray-600">Admin · Editor de Curso</div>
+              <div className="text-sm text-gray-600">
+                {isAdminUser ? 'Admin' : 'Profesor'} · Editor de Curso
+              </div>
               <h1 className="text-xl font-bold text-[#1a2840] truncate">
-                {editTitle?.trim() ? editTitle : 'Editar curso'}
+                {editTitle?.trim()
+                  ? editTitle
+                  : isNewCourse
+                    ? 'Nuevo curso'
+                    : 'Editar curso'}
               </h1>
             </div>
 
@@ -594,48 +619,58 @@ export default function AdminEditorCurso() {
                 onClick={handleBackToCourses}
                 disabled={isSaving || isDeleting || isRedirectingAfterSave}
               >
-                Volver a cursos
+                {isNewCourse ? 'Cancelar' : 'Volver a cursos'}
               </Button>
 
-              <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    disabled={isSaving || isDeleting || isRedirectingAfterSave || isLoading || !!loadError}
-                  >
-                    Eliminar curso
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Eliminar curso</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      ¿Estás seguro que deseas eliminar este curso? Se perderán todos los datos.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting || isRedirectingAfterSave}>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction asChild>
-                      <Button
-                        variant="destructive"
-                        onClick={() => {
-                          setIsDeleteDialogOpen(false);
-                          void handleDeleteCourse();
-                        }}
-                        disabled={isDeleting || isRedirectingAfterSave}
-                      >
-                        {isDeleting ? 'Eliminando…' : 'Sí, eliminar'}
-                      </Button>
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {isAdminUser && !isNewCourse ? (
+                <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      disabled={isSaving || isDeleting || isRedirectingAfterSave || isLoading || !!loadError}
+                    >
+                      Eliminar curso
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Eliminar curso</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        ¿Estás seguro que deseas eliminar este curso? Se perderán todos los datos.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isDeleting || isRedirectingAfterSave}>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction asChild>
+                        <Button
+                          variant="destructive"
+                          onClick={() => {
+                            setIsDeleteDialogOpen(false);
+                            void handleDeleteCourse();
+                          }}
+                          disabled={isDeleting || isRedirectingAfterSave}
+                        >
+                          {isDeleting ? 'Eliminando…' : 'Sí, eliminar'}
+                        </Button>
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : null}
 
               <Button
                 onClick={handleSave}
                 disabled={isSaving || isDeleting || isRedirectingAfterSave || isLoading || !!loadError}
               >
-                {isSaving ? 'Guardando…' : isRedirectingAfterSave ? 'Redirigiendo…' : 'Guardar'}
+                {isSaving
+                  ? isNewCourse
+                    ? 'Creando…'
+                    : 'Guardando…'
+                  : isRedirectingAfterSave
+                    ? 'Redirigiendo…'
+                    : isNewCourse
+                      ? 'Crear curso'
+                      : 'Guardar'}
               </Button>
             </div>
           </div>
@@ -691,70 +726,78 @@ export default function AdminEditorCurso() {
                   </div>
                 )}
 
-                <div className="pt-4 border-t space-y-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">Asignación masiva</div>
-                    <div className="text-xs text-gray-600">Inscribe usuarios activos por sede o por cargo</div>
+                {isAdminUser ? (
+                  <div className="pt-4 border-t space-y-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Asignación masiva</div>
+                      <div className="text-xs text-gray-600">Inscribe usuarios activos por sede o por cargo</div>
+                    </div>
+
+                    <div className="rounded-md border p-3 bg-slate-50 space-y-3">
+                      <div className="text-xs text-gray-600">
+                        Inscritos actuales: <span className="font-semibold text-gray-800">{assignedUserIds.length}</span>
+                      </div>
+
+                      {isNewCourse ? (
+                        <div className="text-xs text-amber-700">
+                          Guarda el curso para habilitar la inscripción de usuarios.
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-gray-700">Por sede</div>
+                        <Select value={massAssignSede} onValueChange={setMassAssignSede}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona sede" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Selecciona sede</SelectItem>
+                            {availableSedes.map((sede) => (
+                              <SelectItem key={sede} value={sede}>
+                                {sede}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => void handleMassAssign('sede')}
+                          disabled={isNewCourse || isMassAssigning || isLoadingUsers || availableSedes.length === 0}
+                        >
+                          {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios de la sede'}
+                        </Button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-gray-700">Por cargo</div>
+                        <Select value={massAssignCargo} onValueChange={setMassAssignCargo}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona cargo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Selecciona cargo</SelectItem>
+                            {availableCargos.map((cargo) => (
+                              <SelectItem key={cargo} value={cargo}>
+                                {cargo}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => void handleMassAssign('cargo')}
+                          disabled={isNewCourse || isMassAssigning || isLoadingUsers || availableCargos.length === 0}
+                        >
+                          {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios del cargo'}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="rounded-md border p-3 bg-slate-50 space-y-3">
-                    <div className="text-xs text-gray-600">
-                      Inscritos actuales: <span className="font-semibold text-gray-800">{assignedUserIds.length}</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-gray-700">Por sede</div>
-                      <Select value={massAssignSede} onValueChange={setMassAssignSede}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona sede" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Selecciona sede</SelectItem>
-                          {availableSedes.map((sede) => (
-                            <SelectItem key={sede} value={sede}>
-                              {sede}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => void handleMassAssign('sede')}
-                        disabled={isMassAssigning || isLoadingUsers || availableSedes.length === 0}
-                      >
-                        {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios de la sede'}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-gray-700">Por cargo</div>
-                      <Select value={massAssignCargo} onValueChange={setMassAssignCargo}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona cargo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Selecciona cargo</SelectItem>
-                          {availableCargos.map((cargo) => (
-                            <SelectItem key={cargo} value={cargo}>
-                              {cargo}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => void handleMassAssign('cargo')}
-                        disabled={isMassAssigning || isLoadingUsers || availableCargos.length === 0}
-                      >
-                        {isMassAssigning ? 'Asignando...' : 'Inscribir usuarios del cargo'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                ) : null}
 
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between gap-2">

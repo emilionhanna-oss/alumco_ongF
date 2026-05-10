@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Users,
   UserCog,
+  Building2
 } from 'lucide-react';
 import { BACKEND_URL } from '../config/api.config';
 import { userService } from '../services/apiService';
@@ -241,6 +242,33 @@ export default function AdminDashboard() {
             <CardContent>
               <p className="text-gray-600">
                 Listado de usuarios, asignación de cursos y seguimiento del progreso individual y grupal.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/admin/sedes')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') navigate('/admin/sedes');
+            }}
+          >
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-teal-100 rounded-lg">
+                  <Building2 className="w-6 h-6 text-teal-700" />
+                </div>
+                <div>
+                  <CardTitle>Gestión de Sedes</CardTitle>
+                  <CardDescription>Ubicaciones ELEAM</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">
+                Añade y modifica sedes. Necesario para categorizar a los usuarios y filtrar reportes.
               </p>
             </CardContent>
           </Card>

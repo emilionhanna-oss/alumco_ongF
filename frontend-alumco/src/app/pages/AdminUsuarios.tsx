@@ -40,23 +40,23 @@ import { formatRutForDisplay, normalizeRutForSearch, normalizeRutForStorage } fr
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
 const STATUS_ORDER: Array<'pendiente' | 'activo' | 'vencido'> = ['pendiente', 'activo', 'vencido'];
 const OFFICIAL_SEDE_OPTIONS = [
-  'Hualpén (Región del Biobío)',
-  'Coyhaique (Región de Aysén)',
+  'Hualpen (Region del Biobio)',
+  'Coyhaique (Region de Aysen)',
 ];
 const CARGO_OPTIONS = [
-  'Pendiente de asignación',
-  'Dirección y Administración',
-  'Enfermería',
+  'Pendiente de asignacion',
+  'Direccion y Administracion',
+  'Enfermeria',
   'Cuidados Directos (TENS/Gerocultor)',
-  'Kinesiología y Rehabilitación',
+  'Kinesiologia y Rehabilitacion',
   'Terapia Ocupacional',
-  'Psicología',
+  'Psicologia',
   'Trabajo Social',
-  'Nutrición y Alimentación',
-  'Recreación y Actividades',
+  'Nutricion y Alimentacion',
+  'Recreacion y Actividades',
   'Aseo e Higiene',
-  'Lavandería y Ropería',
-  'Mantención y Servicios Generales',
+  'Lavanderia y Roperia',
+  'Mantencion y Servicios Generales',
   'Cocina',
 ];
 const ROLE_OPTIONS = [
@@ -260,7 +260,7 @@ export default function AdminUsuarios() {
     setEditingCargo(
       normalized.cargo && CARGO_OPTIONS.includes(normalized.cargo)
         ? normalized.cargo
-        : 'Pendiente de asignación'
+        : 'Pendiente de asignacion'
     );
     setEditingEstado((normalized.estado || 'activo') as UserStatus);
     const cleanedRoles = (normalized.rol || []).filter((role) =>
@@ -414,6 +414,54 @@ export default function AdminUsuarios() {
                 <CardDescription>
                   Filtra por estado, nombre/RUT, sede y cargo. Editar un usuario pendiente lo activa automáticamente.
                 </CardDescription>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  const token = localStorage.getItem('token') || '';
+                  fetch(buildApiUrl('/api/reportes/usuarios/exportar'), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  })
+                  .then(res => res.blob())
+                  .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `usuarios_alumco.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  });
+                }}>
+                  Exportar Excel
+                </Button>
+
+                <Button variant="outline" onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.xlsx, .xls';
+                  input.onchange = (e: any) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const token = localStorage.getItem('token') || '';
+                    fetch(buildApiUrl('/api/reportes/usuarios/importar'), {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` },
+                      body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                      alert(`Importación completada:\nInsertados: ${data.insertados}\nErrores: ${data.errores.length}`);
+                      window.location.reload();
+                    })
+                    .catch(err => alert('Error al importar'));
+                  };
+                  input.click();
+                }}>
+                  Importar Excel
+                </Button>
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as UserStatus)}>
@@ -617,10 +665,10 @@ export default function AdminUsuarios() {
               </Select>
             </div>
 
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="edit-exp">Fecha de expiración (opcional)</Label>
+            <div className="space-y-1">
+              <Label htmlFor="edit-expiracion">Fecha de Expiración (Opcional)</Label>
               <Input
-                id="edit-exp"
+                id="edit-expiracion"
                 type="date"
                 value={editingFechaExpiracion}
                 onChange={(e) => setEditingFechaExpiracion(e.target.value)}

@@ -9,7 +9,7 @@ import { Separator } from '../components/ui/separator';
 import { courseService, userService } from '../services/apiService';
 import type { Course, User } from '../types';
 import { ArrowLeft, Award, Download, Image as ImageIcon, PenLine, User as UserIcon } from 'lucide-react';
-import { BACKEND_URL } from '../config/api.config';
+import { BACKEND_URL, buildApiUrl } from '../config/api.config';
 import { formatRutForDisplay, normalizeRutForStorage } from '../utils/rut';
 
 const LOGO_SRC = `${BACKEND_URL}/static/alumco-logo.png`;
@@ -265,90 +265,25 @@ export default function Perfil() {
       return;
     }
 
-    const alumno = displayName;
-    const curso = course.title || 'Curso';
-    const fecha = new Date().toLocaleDateString('es-CL');
-
-    const safeAlumno = escapeHtml(alumno);
-    const safeCurso = escapeHtml(curso);
-
-    const firmaHtml = firmaImagenSafe
-      ? `<img alt="Firma" src="${firmaImagenSafe}" style="max-height:70px; max-width:260px; object-fit:contain;" />`
-      : (profile?.firmaTexto || '').trim()
-        ? `<div style="font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 22px;">${escapeHtml(
-            (profile?.firmaTexto || '').trim()
-          )}</div>`
-        : `<div style="color:#6b7280; font-size:12px;">Sin firma</div>`;
-
-    const html = `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Certificado - ${safeCurso}</title>
-  <style>
-    @page { size: A4; margin: 18mm; }
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color: #111827; }
-    .wrap { border: 2px solid #1a2840; border-radius: 14px; padding: 24px; }
-    .header { display:flex; align-items:center; justify-content:space-between; gap: 16px; }
-    .logo { height: 44px; }
-    .title { font-size: 28px; font-weight: 800; color: #1a2840; margin: 18px 0 6px; }
-    .subtitle { color: #374151; margin: 0 0 18px; }
-    .name { font-size: 22px; font-weight: 800; margin: 10px 0 0; }
-    .course { font-size: 18px; margin: 10px 0 0; }
-    .footer { display:flex; justify-content:space-between; align-items:flex-end; margin-top: 32px; }
-    .line { border-top: 1px solid #d1d5db; margin-top: 10px; width: 260px; }
-    .muted { color: #6b7280; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="header">
-      <img class="logo" src="${LOGO_SRC}" alt="Alumco" />
-      <div class="muted">Portal de Capacitación ELEAM</div>
-    </div>
-
-    <div class="title">Certificado de Finalización</div>
-    <p class="subtitle">Se certifica que:</p>
-
-    <div class="name">${safeAlumno}</div>
-
-    <p class="subtitle" style="margin-top: 14px;">ha completado satisfactoriamente el curso:</p>
-    <div class="course"><strong>${safeCurso}</strong></div>
-
-    <div class="footer">
-      <div>
-        <div class="muted">Fecha</div>
-        <div>${escapeHtml(fecha)}</div>
-      </div>
-
-      <div style="text-align:right;">
-        <div class="muted">Firma</div>
-        ${firmaHtml}
-        <div class="line"></div>
-        <div class="muted">${escapeHtml(profile?.nombreCompleto || profile?.nombre || profile?.name || 'Usuario')}</div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    window.addEventListener('load', () => {
-      window.focus();
-      window.print();
-    });
-  </script>
-</body>
-</html>`;
-
-    const w = window.open('', '_blank', 'noopener,noreferrer');
-    if (!w) {
-      setSaveStatus({ type: 'error', message: 'No se pudo abrir la ventana del certificado (bloqueador de popups).' });
-      return;
-    }
-
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    const token = localStorage.getItem('token') || '';
+    fetch(buildApiUrl(`/api/cursos/${course.id}/certificado`), {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Error al descargar el certificado');
+      return res.blob();
+    })
+    .then(blob => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Certificado_${course.title}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    })
+    .catch(err => alert(err.message));
   };
 
   return (

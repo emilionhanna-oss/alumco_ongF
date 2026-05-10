@@ -178,7 +178,7 @@ export const authService = {
 export const courseService = {
   /**
    * Obtiene lista de cursos
-   * Fuente de verdad: backend (`data/db.json`).
+   * Fuente de verdad: backend (API PostgreSQL).
    * Si el servidor falla, NO inventa cursos.
    */
   async getCourses(options: { all?: boolean } = {}): Promise<ApiResponse<Course[]>> {
@@ -250,7 +250,7 @@ export const courseService = {
 
   /**
    * Obtiene detalle de un curso
-   * Fuente de verdad: backend (`data/db.json`).
+   * Fuente de verdad: backend (API PostgreSQL).
    * Si falla, NO inventa cursos.
    */
   async getCourseDetail(courseId: string): Promise<ApiResponse<CourseDetail>> {
